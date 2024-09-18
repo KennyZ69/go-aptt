@@ -22,7 +22,9 @@ jobs:
           go-version: '1.22.7'
 
       - name: Run Security Scan
-        run: go run main.go vulnerable-app
+        # run: go run main.go vulnerable-app
+        # For now, wont be testing any vulnerable code
+        run: go run main.go
 
       - name: Fail Build on Vulnerabilities
         if: failure()

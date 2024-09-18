@@ -6,9 +6,20 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 )
+
+type Vulnerability struct {
+	Name        string
+	Description string
+	File        string
+	// Line  int
+	Line token.Pos
+}
 
 func securityScan(target string) (string, error) {
 	fmt.Printf("Running security scans on: %v\n", target)
@@ -38,6 +49,10 @@ func main() {
 		if err != nil {
 			fmt.Printf("Error parsing %s file in the main func: %v\n", goFile, err)
 		}
+
+		log.Printf("Checking %s for hardcoded secrets\n", goFile)
+		vuln := checkForSecrets(parsedFile, goFile)
+		fmt.Println("Found vulnerabilities: ", vuln)
 		parsedGoFiles = append(parsedGoFiles, parsedFile)
 		fmt.Printf("Parsing %s file and appending into parsed files array\n", goFile)
 	}
@@ -69,7 +84,7 @@ func getGoFiles(root string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		if !d.IsDir() && (filepath.Ext(d.Name()) == ".go") {
+		if !d.IsDir() && (filepath.Ext(d.Name()) == ".go") && !strings.Contains(d.Name(), "_test.go") {
 			goFiles = append(goFiles, path)
 		}
 		return nil
@@ -89,6 +104,38 @@ func parseGoFiles(filePath string) (*ast.File, error) {
 	fmt.Printf("Parsed AST for %s:\n", filePath)
 
 	// Possible ast printing of the files for debugging
-	ast.Print(fset, node)
+	// ast.Print(fset, node)
 	return node, err
+}
+
+func checkForSecrets(node ast.Node, fileName string) []Vulnerability {
+	var vulnerabilities []Vulnerability
+	secretPattern := regexp.MustCompile(`(?i)(password|apikey|token|secret)[^=]*=("|')\w+("|')`)
+
+	// Inspect the AST for hardcoded secrets
+	ast.Inspect(node, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.AssignStmt:
+			for _, rhs := range x.Rhs {
+				if basicLit, ok := rhs.(*ast.BasicLit); ok && basicLit.Kind == token.STRING {
+					if secretPattern.MatchString(basicLit.Value) {
+						vuln := Vulnerability{
+							Name:        "Hardcoded Secret",
+							Description: "Potential hardcoded secret found",
+							File:        fileName,
+							Line:        basicLit.Pos(),
+						}
+						vulnerabilities = append(vulnerabilities, vuln)
+					}
+				}
+			}
+		}
+		return true
+	})
+	return vulnerabilities
+}
+
+// Helper function to check if the file is a test file
+func isTestFile(fileName string) bool {
+	return filepath.Ext(fileName) == ".go" && filepath.Base(fileName)[:len(fileName)-3] == "_test"
 }
