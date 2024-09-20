@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -9,22 +10,22 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
+	"time"
+
+	"github.com/KennyZ69/go-aptt/simulations"
+	_ "github.com/lib/pq"
 )
 
-type Vulnerability struct {
-	Name        string
-	Description string
-	File        string
-	// Line  int
-	Line token.Pos
-}
-
-func securityScan(target string) (string, error) {
+func securityScan(target string, db *sql.DB) (string, error) {
 	fmt.Printf("Running security scans on: %v\n", target)
 
 	// Now check for vulnerabilities, possible exploitaitons, and make report messages with suggestions on fixes
+	sqlInjectionResults := simulations.SimulateSQLInjection(db)
+	fmt.Println("Reports of the sql injection simulations:")
+	for _, result := range sqlInjectionResults {
+		log.Println(result)
+	}
 
 	if target == "vulnerable-app" {
 		return "Vulnerabilities detect in the target app", fmt.Errorf("vulnerable-app as target")
@@ -34,13 +35,33 @@ func securityScan(target string) (string, error) {
 
 func main() {
 
-	rootDir := "."
-	goFiles, err := getGoFiles(rootDir)
+	// Pass target as a command-line argument for now
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: go run main.go [target]")
+		os.Exit(1)
+	}
+
+	target := os.Args[1]
+
+	// rootDir := "."
+	goFiles, err := getGoFiles(target)
 	if err != nil {
 		fmt.Printf("Error getting all the go files in the codebase: %v\n", err)
 		return
 	}
 	fmt.Println("Found the go files: ", goFiles)
+
+	// Set up mock database to test the simulations
+	connStr := "host=db password=testpassword user=test dbname=security_scan_db sslmode=disable"
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatalf("Failed to connect to the database: %v\n", err)
+	}
+	defer db.Close()
+	// Check if the connection is valid
+	if err = waitForDB(db); err != nil {
+		log.Fatalf("Failed to ping the database: %v", err)
+	}
 
 	var parsedGoFiles []*ast.File
 
@@ -51,8 +72,13 @@ func main() {
 		}
 
 		log.Printf("Checking %s for hardcoded secrets\n", goFile)
-		vuln := checkForSecrets(parsedFile, goFile)
-		fmt.Println("Found vulnerabilities: ", vuln)
+		vuln := simulations.CheckForSecrets(parsedFile, goFile)
+		fmt.Println("Found hardcoded secrets: ", vuln)
+
+		log.Printf("Checking %s for SQL Injection vulnerabilities\n", goFile)
+		sqlVuln := simulations.CheckForDynamicSqlQueries(parsedFile, goFile)
+		fmt.Println("Found SQL Injection vulnerabilities: ", sqlVuln)
+
 		parsedGoFiles = append(parsedGoFiles, parsedFile)
 		fmt.Printf("Parsing %s file and appending into parsed files array\n", goFile)
 	}
@@ -60,15 +86,7 @@ func main() {
 	// Possible ast printing of the files for debugging
 	// ast.Print(token.NewFileSet(), parsedGoFiles)
 
-	// Pass target as a command-line argument for now
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run main.go [target]")
-		os.Exit(1)
-	}
-
-	target := os.Args[1]
-
-	report, err := securityScan(target)
+	report, err := securityScan(target, db)
 	if err != nil {
 		fmt.Printf("Found vulnerabilities: report: %v\n", report)
 		os.Exit(1)
@@ -84,7 +102,7 @@ func getGoFiles(root string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		if !d.IsDir() && (filepath.Ext(d.Name()) == ".go") && !strings.Contains(d.Name(), "_test.go") {
+		if !d.IsDir() && (filepath.Ext(d.Name()) == ".go") && !strings.Contains(d.Name(), "_test.go") && !strings.Contains(d.Name(), "_simulation.go") {
 			goFiles = append(goFiles, path)
 		}
 		return nil
@@ -108,34 +126,20 @@ func parseGoFiles(filePath string) (*ast.File, error) {
 	return node, err
 }
 
-func checkForSecrets(node ast.Node, fileName string) []Vulnerability {
-	var vulnerabilities []Vulnerability
-	secretPattern := regexp.MustCompile(`(?i)(password|apikey|token|secret)[^=]*=("|')\w+("|')`)
-
-	// Inspect the AST for hardcoded secrets
-	ast.Inspect(node, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.AssignStmt:
-			for _, rhs := range x.Rhs {
-				if basicLit, ok := rhs.(*ast.BasicLit); ok && basicLit.Kind == token.STRING {
-					if secretPattern.MatchString(basicLit.Value) {
-						vuln := Vulnerability{
-							Name:        "Hardcoded Secret",
-							Description: "Potential hardcoded secret found",
-							File:        fileName,
-							Line:        basicLit.Pos(),
-						}
-						vulnerabilities = append(vulnerabilities, vuln)
-					}
-				}
-			}
-		}
-		return true
-	})
-	return vulnerabilities
-}
-
 // Helper function to check if the file is a test file
 func isTestFile(fileName string) bool {
 	return filepath.Ext(fileName) == ".go" && filepath.Base(fileName)[:len(fileName)-3] == "_test"
+}
+
+func waitForDB(db *sql.DB) error {
+	retryCount := 10
+	for i := 0; i < retryCount; i++ {
+		err := db.Ping()
+		if err == nil {
+			return nil
+		}
+		log.Printf("Database not ready, retrying... (%d/%d)\n", i+1, retryCount)
+		time.Sleep(5 * time.Second)
+	}
+	return fmt.Errorf("failed to connect to the database after %d retries", retryCount)
 }
