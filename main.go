@@ -118,8 +118,12 @@ func parseGoFiles(filePath string) (*ast.File, error) {
 		return nil, fmt.Errorf("Error parsing the %s file: %v\n", filePath, err)
 	}
 
+	if node == nil {
+		return nil, fmt.Errorf("Parsed file got nil nodes: %s; report: %v\n", filePath, err)
+	}
 	// Print the AST (for debugging purposes)
 	fmt.Printf("Parsed AST for %s:\n", filePath)
+	fmt.Printf("Node type: %T\n", node)
 
 	// Possible ast printing of the files for debugging
 	// ast.Print(fset, node)

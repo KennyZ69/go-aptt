@@ -93,3 +93,90 @@ func TestSimulateSQLInjection(t *testing.T) {
 		t.Errorf("there were unfulfilled expectations: %s", err)
 	}
 }
+
+func TestCheckForSecrets(t *testing.T) {
+	tests := []struct {
+		name          string
+		source        string
+		expectedVulns int
+		// expectedNames []string
+	}{
+		{
+			name: "Hardcoded Password Detected",
+			source: `
+				package main
+				func main() {
+					password := "supersecretpassword"
+				}
+			`,
+			expectedVulns: 1,
+			// expectedNames: []string{"Hardcoded Secret"},
+		},
+		{
+			name: "Hardcoded API Key Detected",
+			source: `
+				package main
+				func main() {
+					apiKey := "1234567890abcdef"
+				}
+			`,
+			expectedVulns: 1,
+			// expectedNames: []string{"Hardcoded Secret"},
+		},
+		{
+			name: "No Hardcoded Secrets",
+			source: `
+				package main
+				func main() {
+					nonSensitive := "some harmless string"
+				}
+			`,
+			expectedVulns: 0,
+			// expectedNames: nil,
+		},
+		{
+			name: "Secret in Non-String Expression",
+			source: `
+				package main
+				func main() {
+					password := 12345
+				}
+			`,
+			expectedVulns: 1,
+			// expectedNames: nil,
+		},
+		{
+			name: "Secret in Complex Expression",
+			source: `
+				package main
+				func main() {
+					complexPassword := "password=" + "something"
+				}
+			`,
+			expectedVulns: 1,
+			// expectedNames: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			node, err := parser.ParseFile(fset, "", test.source, parser.AllErrors)
+			if err != nil {
+				t.Fatalf("Error parsing source: %v", err)
+			}
+
+			vulns := CheckForSecrets(node, "main.go")
+
+			if len(vulns) != test.expectedVulns {
+				t.Errorf("Expected %d vulnerabilities, got %d", test.expectedVulns, len(vulns))
+			}
+
+			// for i, vuln := range vulns {
+			// 	if vuln.Name != test.expectedNames[i] {
+			// 		t.Errorf("Expected vulnerability name %s, got %s", test.expectedNames[i], vuln.Name)
+			// 	}
+			// }
+		})
+	}
+}
