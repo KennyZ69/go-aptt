@@ -8,8 +8,8 @@ services:
       POSTGRES_USER: test
       POSTGRES_PASSWORD: testpassword
       POSTGRES_DB: security_scan_db
-    # volumes:
-      # - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5433:5432"
     # healthcheck:

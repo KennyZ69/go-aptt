@@ -11,7 +11,6 @@ import (
 )
 
 func CheckForDynamicSqlQueries(node *ast.File, filename string) []types.Vulnerability {
-	log.Printf("Node type: %T\n", node)
 	var vulnerabilities []types.Vulnerability
 	ast.Inspect(node, func(n ast.Node) bool {
 		// skip node if it is nil, also if the function call or arguments (or each individual argument) is nil, skip them
@@ -31,54 +30,59 @@ func CheckForDynamicSqlQueries(node *ast.File, filename string) []types.Vulnerab
 						log.Println("Call.Fun is nil in CheckDynamicQueries")
 						return false
 					}
-					// Look for database-related function calls
-					// TODO: HERE is the problem, with the segmentation fault, have to figure it out somehow in the near future hopefully
-					if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "Exec" || ident.Name == "Query" {
-						if call.Args == nil {
-							log.Println("Call.Args is nil in CheckDynamicQueries")
-							return true
+
+					// TODO: It should probably be *selectorExpr so should handle it that way !
+					switch fun := call.Fun.(type) {
+					case *ast.Ident:
+						if fun.Name == "Exec" || fun.Name == "Query" {
+							fmt.Println("For some reason it found function call for db without the db")
+							return false
 						}
 
-						if len(call.Args) > 1 { // Check if arguments are passed
-							// Ensure the SQL query has placeholders
-							if basicLit, ok := call.Args[0].(*ast.BasicLit); ok && (strings.Contains(basicLit.Value, "?") || strings.Contains(basicLit.Value, "$")) {
-								vuln := types.Vulnerability{
-									Name:        "Safe SQL Query",
-									Description: "Query uses parameterized inputs",
-									File:        filename,
-									Line:        basicLit.ValuePos,
-								}
-								log.Println("SQL Queries are alright: report: ", vuln)
-								return true
-								// No vulnerabilities here, parameterized queries are safe
-							} else {
-								vuln := types.Vulnerability{
-									Name:        "Non-Parameterized SQL Query",
-									Description: "Potential SQL injection due to missing parameterized inputs",
-									File:        filename,
-									Line:        basicLit.ValuePos,
-								}
+					case *ast.SelectorExpr:
+						if fun.Sel.Name == "Exec" || fun.Sel.Name == "Query" {
+							if len(call.Args) > 1 { // Check if arguments are passed
+								// Ensure the SQL query has placeholders
+								if basicLit, ok := call.Args[0].(*ast.BasicLit); ok && (strings.Contains(basicLit.Value, "?") || strings.Contains(basicLit.Value, "$")) {
+									vuln := types.Vulnerability{
+										Name:        "Safe SQL Query",
+										Description: "Query uses parameterized inputs",
+										File:        filename,
+										Line:        basicLit.ValuePos,
+									}
+									log.Println("SQL Queries are alright: report: ", vuln)
+									return true
+									// No vulnerabilities here, parameterized queries are safe
+								} else {
+									vuln := types.Vulnerability{
+										Name:        "Non-Parameterized SQL Query",
+										Description: "Potential SQL injection due to missing parameterized inputs",
+										File:        filename,
+										Line:        basicLit.ValuePos,
+									}
 
-								// Check for string concatenation in the SQL query
-								// for _, arg := range call.Args {
-								// 	if arg == nil {
-								// 		return true
-								// 	}
-								// 	if binaryExpr, ok := arg.(*ast.BinaryExpr); ok {
-								// 		if binaryExpr.Op == token.ADD {
-								// 			vuln := types.Vulnerability{
-								// 				Name:        "Dynamic SQL Query Construction",
-								// 				Description: "Potential SQL injection vulnerability due to dynamic SQL query construction using string concatenation",
-								// 				File:        filename,
-								// 				Line:        binaryExpr.Pos(),
-								// 			}
-								vulnerabilities = append(vulnerabilities, vuln)
-								// }
+									// Check for string concatenation in the SQL query
+									// for _, arg := range call.Args {
+									// 	if arg == nil {
+									// 		return true
+									// 	}
+									// 	if binaryExpr, ok := arg.(*ast.BinaryExpr); ok {
+									// 		if binaryExpr.Op == token.ADD {
+									// 			vuln := types.Vulnerability{
+									// 				Name:        "Dynamic SQL Query Construction",
+									// 				Description: "Potential SQL injection vulnerability due to dynamic SQL query construction using string concatenation",
+									// 				File:        filename,
+									// 				Line:        binaryExpr.Pos(),
+									// 			}
+									vulnerabilities = append(vulnerabilities, vuln)
+									// }
+								}
 							}
 						}
 					}
 				}
 			}
+
 		}
 		return true
 	})

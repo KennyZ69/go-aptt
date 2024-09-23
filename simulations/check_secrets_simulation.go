@@ -3,14 +3,12 @@ package simulations
 import (
 	"go/ast"
 	"go/token"
-	"log"
 	"regexp"
 
 	"github.com/KennyZ69/go-aptt/types"
 )
 
 func CheckForSecrets(node *ast.File, fileName string) []types.Vulnerability {
-	log.Printf("Node type: %T\n", node)
 	var vulnerabilities []types.Vulnerability
 	secretPattern := regexp.MustCompile(`(?i)(password|apikey|token|secret)[^=]*=("|')\w+("|')`)
 

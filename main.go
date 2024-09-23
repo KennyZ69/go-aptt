@@ -20,48 +20,12 @@ import (
 func securityScan(target string, db *sql.DB) (string, error) {
 	fmt.Printf("Running security scans on: %v\n", target)
 
-	// Now check for vulnerabilities, possible exploitaitons, and make report messages with suggestions on fixes
-	sqlInjectionResults := simulations.SimulateSQLInjection(db)
-	fmt.Println("Reports of the sql injection simulations:")
-	for _, result := range sqlInjectionResults {
-		log.Println(result)
-	}
-
-	if target == "vulnerable-app" {
-		return "Vulnerabilities detect in the target app", fmt.Errorf("vulnerable-app as target")
-	}
-	return "No vulnerabilities for now", nil
-}
-
-func main() {
-
-	// Pass target as a command-line argument for now
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run main.go [target]")
-		os.Exit(1)
-	}
-
-	target := os.Args[1]
-
 	// rootDir := "."
 	goFiles, err := getGoFiles(target)
 	if err != nil {
-		fmt.Printf("Error getting all the go files in the codebase: %v\n", err)
-		return
+		return "Error getting the go files running the Security Scan: report: ", fmt.Errorf(err.Error())
 	}
 	fmt.Println("Found the go files: ", goFiles)
-
-	// Set up mock database to test the simulations
-	connStr := "host=db password=testpassword user=test dbname=security_scan_db sslmode=disable"
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatalf("Failed to connect to the database: %v\n", err)
-	}
-	defer db.Close()
-	// Check if the connection is valid
-	if err = waitForDB(db); err != nil {
-		log.Fatalf("Failed to ping the database: %v", err)
-	}
 
 	var parsedGoFiles []*ast.File
 
@@ -75,9 +39,9 @@ func main() {
 		vuln := simulations.CheckForSecrets(parsedFile, goFile)
 		fmt.Println("Found hardcoded secrets: ", vuln)
 
-		log.Printf("Checking %s for SQL Injection vulnerabilities\n", goFile)
+		log.Printf("Checking %s for SQL Dynamic Queries in the codebase\n", goFile)
 		sqlVuln := simulations.CheckForDynamicSqlQueries(parsedFile, goFile)
-		fmt.Println("Found SQL Injection vulnerabilities: ", sqlVuln)
+		fmt.Println("Found SQL Dynamic Query vulnerabilities: ", sqlVuln)
 
 		parsedGoFiles = append(parsedGoFiles, parsedFile)
 		fmt.Printf("Parsing %s file and appending into parsed files array\n", goFile)
@@ -85,6 +49,39 @@ func main() {
 
 	// Possible ast printing of the files for debugging
 	// ast.Print(token.NewFileSet(), parsedGoFiles)
+
+	// Now check for vulnerabilities, possible exploitaitons, and make report messages with suggestions on fixes
+	sqlInjectionResults := simulations.SimulateSQLInjection(db)
+	fmt.Println("Reports of the sql injection simulations:")
+	for _, result := range sqlInjectionResults {
+		log.Println(result)
+	}
+
+	return "Security Scan ended now! Watch back for your reports.", nil
+}
+
+func main() {
+
+	// Pass target (the root directory or the directory from which the person wants to do the checks) as a command-line argument for now
+	// Maybe later make it optional to what will be ran in the tests, e.g. somebody doesnt want to test database things so he chooses the option without testing against db
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: go run main.go [target]")
+		os.Exit(1)
+	}
+
+	target := os.Args[1]
+
+	// Set up mock database to test the simulations
+	connStr := "host=db password=testpassword user=test dbname=security_scan_db sslmode=disable"
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatalf("Failed to connect to the database: %v\n", err)
+	}
+	defer db.Close()
+	// Check if the connection is valid
+	if err = waitForDB(db); err != nil {
+		log.Fatalf("Failed to ping the database: %v", err)
+	}
 
 	report, err := securityScan(target, db)
 	if err != nil {
@@ -123,7 +120,6 @@ func parseGoFiles(filePath string) (*ast.File, error) {
 	}
 	// Print the AST (for debugging purposes)
 	fmt.Printf("Parsed AST for %s:\n", filePath)
-	fmt.Printf("Node type: %T\n", node)
 
 	// Possible ast printing of the files for debugging
 	// ast.Print(fset, node)
