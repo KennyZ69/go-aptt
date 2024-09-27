@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -13,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KennyZ69/go-aptt/simulations"
+	"github.com/KennyZ69/go-aptt/simulations/dbs"
 	_ "github.com/lib/pq"
 )
 
@@ -60,27 +61,62 @@ func securityScan(target string, db *sql.DB) (string, error) {
 	return "Security Scan ended now! Watch back for your reports.", nil
 }
 
+var (
+	helpCommand  = flag.Bool("help", false, "Usage: ")
+	codebaseTest = flag.Bool("codebase", false, "Run Security Scan on provided codebase (given file or directory)")
+	networkTest  = flag.Bool("network", false, "Run Security Scan on network with given address")
+	dbTest       = flag.Bool("db", false, "Run Security Scan on database with given host, user, port and type")
+)
+
 func main() {
+
+	var modeCommand string
+	flag.StringVar(&modeCommand, "test_mode", "safe", "specify the mode in what you want to run the test: safe / attack")
 
 	// Pass target (the root directory or the directory from which the person wants to do the checks) as a command-line argument for now
 	// Maybe later make it optional to what will be ran in the tests, e.g. somebody doesnt want to test database things so he chooses the option without testing against db
+	// Mkae it like: go-aptt --type --action --optional_other_things
+
+	flag.Parse()
+
+	args := flag.Args()
+	fmt.Println(args)
+
+	// Test whether there is a flag and argument with that
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run main.go [target]")
+		fmt.Println("Missing arguments: see: go-aptt --help")
 		os.Exit(1)
 	}
 
-	target := os.Args[1]
+	// target := os.Args[1]
 
-	// Set up mock database to test the simulations
-	connStr := "host=db password=testpassword user=test dbname=security_scan_db sslmode=disable"
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatalf("Failed to connect to the database: %v\n", err)
+	if *helpCommand {
+		fmt.Print(`
+	--network [adress] : Scan the network on given adress in sandbox, attacking it
+	--db	   [type]   : Scan the database given you also add things like db-host, user, port etc..
+	--codebase [target]: Scan the codebase from a given directory (or file)
+	--[command] --safe : Run the security scans in safe mode so without attacking against provided base
+	--[command] --attack : Run the security scans in attack mode so it uses malicious code against provided base in a sandbox
+
+`)
+		os.Exit(0)
 	}
-	defer db.Close()
-	// Check if the connection is valid
-	if err = waitForDB(db); err != nil {
-		log.Fatalf("Failed to ping the database: %v", err)
+
+	if *codebaseTest {
+		targetBase := os.Args[1]
+		os.Exit(0)
+	}
+
+	if *dbTest {
+		vulns, err := dbs.DB_Scan()
+		if err != nil {
+
+		}
+		os.Exit(0)
+	}
+
+	if *networkTest {
+		// run the network test
 	}
 
 	report, err := securityScan(target, db)
@@ -129,17 +165,4 @@ func parseGoFiles(filePath string) (*ast.File, error) {
 // Helper function to check if the file is a test file
 func isTestFile(fileName string) bool {
 	return filepath.Ext(fileName) == ".go" && filepath.Base(fileName)[:len(fileName)-3] == "_test"
-}
-
-func waitForDB(db *sql.DB) error {
-	retryCount := 10
-	for i := 0; i < retryCount; i++ {
-		err := db.Ping()
-		if err == nil {
-			return nil
-		}
-		log.Printf("Database not ready, retrying... (%d/%d)\n", i+1, retryCount)
-		time.Sleep(5 * time.Second)
-	}
-	return fmt.Errorf("failed to connect to the database after %d retries", retryCount)
 }
