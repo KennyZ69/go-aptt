@@ -8,51 +8,9 @@ import (
 
 	"github.com/KennyZ69/go-aptt/simulations/dbs"
 	"github.com/KennyZ69/go-aptt/simulations/inter"
+	"github.com/KennyZ69/go-aptt/types"
 	_ "github.com/lib/pq"
 )
-
-// func securityScan(target string, db *sql.DB) (string, error) {
-// 	fmt.Printf("Running security scans on: %v\n", target)
-//
-// 	// rootDir := "."
-// 	goFiles, err := getGoFiles(target)
-// 	if err != nil {
-// 		return "Error getting the go files running the Security Scan: report: ", fmt.Errorf(err.Error())
-// 	}
-// 	fmt.Println("Found the go files: ", goFiles)
-//
-// 	var parsedGoFiles []*ast.File
-//
-// 	for _, goFile := range goFiles {
-// 		parsedFile, err := parseGoFiles(goFile)
-// 		if err != nil {
-// 			fmt.Printf("Error parsing %s file in the main func: %v\n", goFile, err)
-// 		}
-//
-// 		log.Printf("Checking %s for hardcoded secrets\n", goFile)
-// 		vuln := simulations.CheckForSecrets(parsedFile, goFile)
-// 		fmt.Println("Found hardcoded secrets: ", vuln)
-//
-// 		log.Printf("Checking %s for SQL Dynamic Queries in the codebase\n", goFile)
-// 		sqlVuln := simulations.CheckForDynamicSqlQueries(parsedFile, goFile)
-// 		fmt.Println("Found SQL Dynamic Query vulnerabilities: ", sqlVuln)
-//
-// 		parsedGoFiles = append(parsedGoFiles, parsedFile)
-// 		fmt.Printf("Parsing %s file and appending into parsed files array\n", goFile)
-// 	}
-//
-// 	// Possible ast printing of the files for debugging
-// 	// ast.Print(token.NewFileSet(), parsedGoFiles)
-//
-// 	// Now check for vulnerabilities, possible exploitaitons, and make report messages with suggestions on fixes
-// 	sqlInjectionResults := simulations.SimulateSQLInjection(db)
-// 	fmt.Println("Reports of the sql injection simulations:")
-// 	for _, result := range sqlInjectionResults {
-// 		log.Println(result)
-// 	}
-//
-// 	return "Security Scan ended now! Watch back for your reports.", nil
-// }
 
 var (
 	helpCommand  = flag.Bool("help", false, "Usage: ")
@@ -73,15 +31,30 @@ func main() {
 	flag.Parse()
 
 	args := flag.Args()
-	fmt.Println(args)
+	// fmt.Println(args)
 
 	// Test whether there is a flag and argument with that
 	if len(os.Args) < 2 {
 		fmt.Println("Missing arguments and flags: see: go-aptt --help")
+		os.Exit(-1)
+	}
+
+	if !*codebaseTest && !*dbTest && !*networkTest {
+		fmt.Println("Error: No or bad flag provided. You must provide one flag: --codebase --database --network")
+		os.Exit(-1)
+	}
+
+	if (*codebaseTest && *dbTest) || (*codebaseTest && *networkTest) || (*dbTest && *networkTest) {
+		fmt.Println("Error: Multiple flags provided. Use just one flag at a time")
+		os.Exit(-1)
+	}
+
+	if len(args) == 0 {
+		fmt.Println("Error: No target provided. Please specify the target (e.g., directory, database URL, network range).")
 		os.Exit(1)
 	}
 
-	// target := os.Args[1]
+	// target := args[0]
 
 	if *helpCommand {
 		fmt.Print(`
@@ -94,15 +67,18 @@ func main() {
 		os.Exit(0)
 	}
 
+	var vulns_report []types.Vulnerability
+
 	if *codebaseTest {
-		targetBase := os.Args[1]
+		targetBase := args[0]
 		fmt.Println(targetBase)
 		vulns, err := inter.Codebase_scan(targetBase)
 		if err != nil {
 			os.Exit(1)
 		}
+		vulns_report = append(vulns_report, vulns...)
+		fmt.Println("Printing the vulnerabilites found (or not) for testing purposes")
 		log.Println(vulns)
-		os.Exit(0)
 	}
 
 	if *dbTest {
@@ -113,24 +89,31 @@ func main() {
 			log.Fatalln("There was an error while processing the DB_Scan: ", err)
 			os.Exit(1)
 		}
+		vulns_report = append(vulns_report, vulns...)
+		fmt.Println("Printing the vulnerabilites found (or not) for testing purposes")
 		log.Println(vulns)
-		os.Exit(0)
 	}
 
 	if *networkTest {
 		// run the network test
 	}
 
-	// report, err := securityScan(target, db)
-	// if err != nil {
-	// 	fmt.Printf("Found vulnerabilities: report: %v\n", report)
-	// 	os.Exit(1)
-	// } else {
-	// 	fmt.Println("Security scan passed with no vulnerabilities and no errors")
-	// 	os.Exit(0)
-	// }
+	fmt.Println("Creating scan.log file")
+	f, err := os.Create("scan.log")
+	if err != nil {
+		log.Fatalf("Error creating the scan.log file for saving the report of the scan: %v\n", err)
+		os.Exit(1)
+	}
+	defer f.Close()
 
-	// log.Println("Security scan ended, look for your report and repair possible vulnerabilities")
-	log.Println("Wrong flags or arguments: see: go-aptt --help")
+	fmt.Println("Writing into scan.log")
+	for _, vuln := range vulns_report {
+		_, err := fmt.Fprintln(f, vuln)
+		if err != nil {
+			log.Fatalf("Error writing to scan.log: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
 	os.Exit(0)
 }

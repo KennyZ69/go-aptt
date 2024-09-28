@@ -10,7 +10,7 @@ import (
 
 func CheckForSecrets(node *ast.File, fileName string) []types.Vulnerability {
 	var vulnerabilities []types.Vulnerability
-	secretPattern := regexp.MustCompile(`(?i)(password|apikey|token|secret)[^=]*=("|')\w+("|')`)
+	secretPattern := regexp.MustCompile(`(?i)(pwd|password|apikey|token|secret)[^=]*=("|')\w+("|')`)
 
 	// Inspect the AST for hardcoded secrets
 	ast.Inspect(node, func(n ast.Node) bool {
