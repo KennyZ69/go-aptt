@@ -31,7 +31,7 @@ jobs:
       run: mkdir -p reports && cp ./scan.log ./reports/
 
     - name: Upload Security Scan Report
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: security-scan-report
         path: reports/scan.log
