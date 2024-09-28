@@ -1,38 +1,43 @@
-
-name: Security Scan in Docker Sandbox
-
-on:
-  push:
-    branches:
-      - main
-      - develop
-
-jobs:
-  security_scan:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
-
-    - name: Set up Go
-      uses: actions/setup-go@v2
-      with:
-        go-version: '1.22.7'
-
-    - name: Set up Docker Compose 
-      run: docker-compose up --build -d
-
-    - name: Run Security Scanner in Docker
-      run: docker-compose exec app go run main.go . 
-
-    - name: Archive Security Scan Results
-      if: always()
-      run: mkdir -p reports && cp ./scan.log ./reports/
-
-    - name: Upload Security Scan Report
-      uses: actions/upload-artifact@v4
-      with:
-        name: security-scan-report
-        path: reports/scan.log
-
+#
+# name: Security Scan in Docker Sandbox
+#
+# on:
+#   push:
+#     branches:
+#       - main
+#       - develop
+#
+# jobs:
+#   security_scan:
+#     runs-on: ubuntu-latest
+#
+#     steps:
+#     - name: Checkout code
+#       uses: actions/checkout@v2
+#
+#     - name: Set up Go
+#       uses: actions/setup-go@v2
+#       with:
+#         go-version: '1.22.7'
+#
+#     - name: Install Docker Compose
+#       run: |
+#         sudo apt-get update
+#         sudo apt-get install -y docker-compose
+#
+#     - name: Set up Docker Compose 
+#       run: docker-compose up --build -d
+#
+#     - name: Run Security Scanner in Docker
+#       run: docker-compose exec app go run main.go . 
+#
+#     - name: Archive Security Scan Results
+#       if: always()
+#       run: mkdir -p reports && cp ./scan.log ./reports/
+#
+#     - name: Upload Security Scan Report
+#       uses: actions/upload-artifact@v4
+#       with:
+#         name: security-scan-report
+#         path: reports/scan.log
+#

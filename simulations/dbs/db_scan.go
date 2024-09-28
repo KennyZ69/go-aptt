@@ -30,6 +30,7 @@ func DB_Scan(mode, db_type string) ([]types.Vulnerability, error) {
 		return nil, err
 	}
 
+	log.Println("Security scan on the database ended, look for your reports in the reports directory")
 	return nil, nil
 }
 
