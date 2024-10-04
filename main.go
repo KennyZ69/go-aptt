@@ -40,7 +40,7 @@ func main() {
 	}
 
 	if !*codebaseTest && !*dbTest && !*networkTest {
-		fmt.Println("Error: No or bad flag provided. You must provide one flag: --codebase --database --network")
+		fmt.Println("Error: None or bad flags provided. You must provide one flag: --codebase --database --network")
 		os.Exit(-1)
 	}
 
@@ -71,7 +71,7 @@ func main() {
 
 	if *codebaseTest {
 		targetBase := args[0]
-		fmt.Println(targetBase)
+		// fmt.Println(targetBase)
 		vulns, err := inter.Codebase_scan(targetBase)
 		if err != nil {
 			os.Exit(1)
@@ -86,7 +86,7 @@ func main() {
 		fmt.Println(db_type)
 		vulns, err := dbs.DB_Scan(modeCommand, db_type)
 		if err != nil {
-			log.Fatalln("There was an error while processing the DB_Scan: ", err)
+			log.Fatalln("There was an error while processing the DB Scan: ", err)
 			os.Exit(1)
 		}
 		vulns_report = append(vulns_report, vulns...)

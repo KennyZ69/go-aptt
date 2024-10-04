@@ -50,3 +50,38 @@ func ParseGoFiles(filePath string) (*ast.File, error) {
 	// ast.Print(fset, node)
 	return node, err
 }
+
+func IsUserControlledInput(expr ast.Expr) bool {
+	switch e := expr.(type) {
+	case *ast.SelectorExpr:
+		if ident, ok := e.X.(*ast.Ident); ok && (ident.Name == "req" || ident.name == "r") {
+			if e.Sel.Name == "FormValue" || e.Sel.Name == "Query" || e.Sel.Name == "Body" || e.Sel.Name == "PostForm" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func IsSanitizedUserInput(expr ast.Expr) bool {
+	switch e := expr.(type) {
+	case *ast.CallExpr:
+		if fun, ok := e.Fun.(*ast.SelectorExpr); ok {
+			if pkg, ok := fun.X.(*ast.Ident); ok && (pkg.Name == "html" && fun.Sel.Name == "EscapeString") || (pkg.Name == "url" && fun.Sel.Name == "QueryEscape" || fun.Sel.Name == "PathEscape") || (pkg.Name == "strings" && fun.Sel.Name == "ReplaceAll") || (pkg.Name == "json" && fun.Sel.Name == "Marshal") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func IsRenderDirectly(call *ast.CallExpr) bool {
+	if fun, ok := call.Fun.(*ast.SelectorExpr); ok {
+		if ident, ok := fun.X.(*ast.Ident); ok {
+			if (ident.Name == "fmt" && fun.Sel.Name == "Fprintf" || fun.Sel.Name == "Sprintf") || (ident.Name == "w" && fun.Sel.Name == "Write") {
+				return true
+			}
+		}
+	}
+	return false
+}
