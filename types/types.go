@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"io/fs"
 	"path/filepath"
 	"strings"
@@ -54,7 +55,7 @@ func ParseGoFiles(filePath string) (*ast.File, error) {
 func IsUserControlledInput(expr ast.Expr) bool {
 	switch e := expr.(type) {
 	case *ast.SelectorExpr:
-		if ident, ok := e.X.(*ast.Ident); ok && (ident.Name == "req" || ident.name == "r") {
+		if ident, ok := e.X.(*ast.Ident); ok && (ident.Name == "req" || ident.Name == "r") {
 			if e.Sel.Name == "FormValue" || e.Sel.Name == "Query" || e.Sel.Name == "Body" || e.Sel.Name == "PostForm" {
 				return true
 			}
@@ -75,13 +76,18 @@ func IsSanitizedUserInput(expr ast.Expr) bool {
 	return false
 }
 
-func IsRenderDirectly(call *ast.CallExpr) bool {
+func IsRenderingDirectly(call *ast.CallExpr) bool {
 	if fun, ok := call.Fun.(*ast.SelectorExpr); ok {
 		if ident, ok := fun.X.(*ast.Ident); ok {
-			if (ident.Name == "fmt" && fun.Sel.Name == "Fprintf" || fun.Sel.Name == "Sprintf") || (ident.Name == "w" && fun.Sel.Name == "Write") {
+			if (ident.Name == "fmt" && (fun.Sel.Name == "Fprintf" || fun.Sel.Name == "Sprintf")) || (ident.Name == "w" && fun.Sel.Name == "Write") {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+func TestFunc() {
+	pwd := "1234"
+	fmt.Fprintf(io.MultiWriter(), pwd)
 }

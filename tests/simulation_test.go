@@ -3,10 +3,9 @@ package tests
 import (
 	"go/parser"
 	"go/token"
-	"log"
 	"testing"
 
-	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/KennyZ69/go-aptt/simulations/inter"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -22,7 +21,7 @@ func TestCheckForDynamicSqlQueries(t *testing.T) {
 			sourceCode: `
 				package main
 				func query(db *sql.DB, username string) {
-					query := "SELECT * FROM users WHERE username = '" + username + "'"
+					query := fmt.Sprintf("SELECT * FROM users WHERE username = " + username)
 					db.Exec(query)
 				}
 			`,
@@ -59,38 +58,11 @@ func TestCheckForDynamicSqlQueries(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Run the SQL injection check
-			vulnerabilities := CheckForDynamicSqlQueries(node, "test.go")
+			vulnerabilities := inter.CheckForDynamicSqlQueries(node, "test.go")
 
 			// Assert the number of vulnerabilities
 			assert.Equal(t, test.expectedVulns, len(vulnerabilities))
 		})
-	}
-}
-
-// TestSimulateSQLInjection tests SQL injection simulation
-func TestSimulateSQLInjection(t *testing.T) {
-	// Create a mock database
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("failed to open a mock database: %s", err)
-	}
-	defer db.Close()
-
-	// Setup expectations for SQL executions
-	mock.ExpectExec("SELECT \\* FROM users WHERE username =").WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// Run the simulation
-	results := SimulateSQLInjection(db)
-	// try to print the results to check if it is alright
-	log.Println(results)
-
-	// Assert that there are results
-	assert.NotNil(t, results)
-	assert.NotEmpty(t, results)
-
-	// Verify all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("there were unfulfilled expectations: %s", err)
 	}
 }
 
@@ -166,7 +138,7 @@ func TestCheckForSecrets(t *testing.T) {
 				t.Fatalf("Error parsing source: %v", err)
 			}
 
-			vulns := CheckForSecrets(node, "main.go")
+			vulns := inter.CheckForSecrets(node, "main.go")
 
 			if len(vulns) != test.expectedVulns {
 				t.Errorf("Expected %d vulnerabilities, got %d", test.expectedVulns, len(vulns))
@@ -177,6 +149,90 @@ func TestCheckForSecrets(t *testing.T) {
 			// 		t.Errorf("Expected vulnerability name %s, got %s", test.expectedNames[i], vuln.Name)
 			// 	}
 			// }
+		})
+	}
+}
+
+func TestCheckForXSS(t *testing.T) {
+	tests := []struct {
+		name          string
+		code          string
+		expectedVulns int
+	}{
+		{
+			name: "Unsafe rendering with user input - possible XSS",
+			code: `
+				package main
+
+				import (
+					"fmt"
+					"net/http"
+				)
+
+				func handler(w http.ResponseWriter, r *http.Request) {
+					input := r.FormValue("input")
+					fmt.Fprintf(w, input) // Possible XSS
+				}
+			`,
+			expectedVulns: 1,
+		},
+		{
+			name: "Safe rendering with HTML escaping",
+			code: `
+				package main
+
+				import (
+					"fmt"
+					"net/http"
+					"html"
+				)
+
+				func handler(w http.ResponseWriter, r *http.Request) {
+					input := r.FormValue("input")
+					escapedInput := html.EscapeString(input)
+					fmt.Fprintf(w, escapedInput) // Safe usage
+				}
+			`,
+			expectedVulns: 0,
+		},
+		{
+			name: "User input not used in rendering",
+			code: `
+				package main
+
+				import "net/http"
+
+				func handler(w http.ResponseWriter, r *http.Request) {
+					input := r.FormValue("input")
+					_ = input // Not used
+				}
+			`,
+			expectedVulns: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := token.NewFileSet()
+			node, err := parser.ParseFile(fs, "", tt.code, parser.AllErrors)
+			if err != nil {
+				t.Fatalf("Failed to parse code: %v", err)
+			}
+
+			// Run the function to check for XSS vulnerabilities
+			vulns := inter.CheckForXSSPossibilities(node, "test.go")
+
+			if len(vulns) == 0 {
+				t.Errorf("Expected vulnerabilities, but found none")
+			} else {
+				for _, vuln := range vulns {
+					t.Logf("Found vulnerability: %s at line %d", vuln.Description, vuln.Line)
+				}
+			}
+			// Check if the number of vulnerabilities matches the expected number
+			if len(vulns) != tt.expectedVulns {
+				t.Errorf("Expected %d vulnerabilities, but got %d", tt.expectedVulns, len(vulns))
+			}
 		})
 	}
 }

@@ -26,7 +26,11 @@ func Codebase_scan(target string) ([]types.Vulnerability, error) {
 			return nil, fmt.Errorf("Problem parsing the go files in Codebase_scan: %v\n", err)
 		}
 
-		log.Println("Looking for hardcoded secrets in the file")
+		if parsedFile == nil {
+			return nil, fmt.Errorf("Parsed file is nil: %v\n", err)
+		}
+
+		log.Println("Looking for hardcoded secrets in " + file)
 		// Checking for hardcoded secrets like api key, passwords etc...
 		vulns = CheckForSecrets(parsedFile, file)
 		if vulns == nil {
@@ -34,7 +38,24 @@ func Codebase_scan(target string) ([]types.Vulnerability, error) {
 		} else {
 			log.Printf("Found hardcoded secrets in %s: %v\n", file, vulns)
 		}
-		vulns = append(vulns, CheckForDynamicSqlQueries(parsedFile, file)...)
+		// vulns = append(vulns, CheckForDynamicSqlQueries(parsedFile, file)...)
+		log.Println("Loooking for dynamic sql queries in " + file)
+		dynamicQueriesVulns := CheckForDynamicSqlQueries(parsedFile, file)
+		if dynamicQueriesVulns == nil {
+			log.Println("No dynamic queries were found in " + file)
+		} else {
+			log.Printf("Found dynamic queries in %s: %v\n", file, dynamicQueriesVulns)
+		}
+		vulns = append(vulns, dynamicQueriesVulns...)
+
+		log.Println("Looking for possible xss scripting vulnerabilities")
+		xssPossibleVulns := CheckForXSSPossibilities(parsedFile, file)
+		if xssPossibleVulns == nil {
+			log.Println("No possible vulnerabilities for xss scripting in " + file)
+		} else {
+			log.Printf("Found possible vulnerabilites for xss scripting in %s: %v\n", file, xssPossibleVulns)
+		}
+		vulns = append(vulns, xssPossibleVulns...)
 	}
 
 	// I should probably stop returning the vulnerabilites, just the errors
