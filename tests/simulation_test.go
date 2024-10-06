@@ -222,13 +222,13 @@ func TestCheckForXSS(t *testing.T) {
 			// Run the function to check for XSS vulnerabilities
 			vulns := inter.CheckForXSSPossibilities(node, "test.go")
 
-			if len(vulns) == 0 {
-				t.Errorf("Expected vulnerabilities, but found none")
-			} else {
+			// if len(vulns) == 0 {
+			// 	t.Errorf("Expected vulnerabilities, but found none")
+			// } else {
 				for _, vuln := range vulns {
 					t.Logf("Found vulnerability: %s at line %d", vuln.Description, vuln.Line)
 				}
-			}
+			// }
 			// Check if the number of vulnerabilities matches the expected number
 			if len(vulns) != tt.expectedVulns {
 				t.Errorf("Expected %d vulnerabilities, but got %d", tt.expectedVulns, len(vulns))

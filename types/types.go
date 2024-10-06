@@ -53,13 +53,24 @@ func ParseGoFiles(filePath string) (*ast.File, error) {
 }
 
 func IsUserControlledInput(expr ast.Expr) bool {
+	fmt.Println("Running the IsUserControlledInput function from checking for xss possibilities")
 	switch e := expr.(type) {
 	case *ast.SelectorExpr:
-		if ident, ok := e.X.(*ast.Ident); ok && (ident.Name == "req" || ident.Name == "r") {
+		fmt.Println("It is selector expression")
+		// if ident, ok := e.X.(*ast.Ident); ok && (ident.Name == "req" || ident.Name == "r") {
+		if ident, ok := e.X.(*ast.Ident); ok {
+			fmt.Println(ident.Name)
 			if e.Sel.Name == "FormValue" || e.Sel.Name == "Query" || e.Sel.Name == "Body" || e.Sel.Name == "PostForm" {
 				return true
 			}
 		}
+	case *ast.CallExpr:
+		fmt.Println("It is call expression")
+		if fun, ok := e.Fun.(*ast.SelectorExpr); ok {
+			if pkg, ok := fun.X.(*ast.Ident); ok && (pkg.Name == "r" || pkg.Name == "req" || pkg.Name == "request") && (fun.Sel.Name == "Query" || fun.Sel.Name == "FormValue" || fun.Sel.Name == "Body" || fun.Sel.Name == "PostForm") {
+				return true
+			}
+		}	
 	}
 	return false
 }

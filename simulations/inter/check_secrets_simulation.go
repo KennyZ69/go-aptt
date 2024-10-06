@@ -159,18 +159,25 @@ func CheckForXSSPossibilities(node *ast.File, filename string) []types.Vulnerabi
 	ast.Inspect(node, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.AssignStmt:
-			for _, rhs := range x.Rhs {
-				if types.IsUserControlledInput(rhs) {
-					for _, lhs := range x.Lhs {
+			fmt.Println("Looking at the node as assign statement")
+			for index, rhs := range x.Rhs {
+				fmt.Println("Looking at the right hand side")
+				// if types.IsUserControlledInput(rhs) {
+				isUControlInput := types.IsUserControlledInput(rhs)
+				if isUControlInput {
+					fmt.Println("Found out it is user controlled input")
+					lhs := x.Lhs[index]
 						if ident, ok := lhs.(*ast.Ident); ok {
 							userControlledArgs[ident.Name] = true
-						}
 					}
 				}
 			}
 		case *ast.CallExpr:
+			fmt.Println("Looking at the node as call expression")
 			if types.IsRenderingDirectly(x) {
+				fmt.Println("Found out it is rendering directly into html without sanitization")
 				for _, arg := range x.Args {
+					fmt.Println("Looking at the arguments")
 					if ident, ok := arg.(*ast.Ident); ok && userControlledArgs[ident.Name] && !types.IsSanitizedUserInput(x) {
 						vulns = append(vulns, types.Vulnerability{
 							Name:        "Possible XSS vulnerability coded in the codebase",
