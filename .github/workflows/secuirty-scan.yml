@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - develop
+      - master
 
 jobs:
   security_scan:
@@ -29,7 +30,7 @@ jobs:
       run: docker-compose up --build -d
 
     - name: Run Security Scanner in Docker
-      run: docker-compose exec go run main.go --codebase . > scan.log 
+      run: docker-compose exec app go run main.go --codebase .
 
     - name: Archive Security Scan Results
       if: always()

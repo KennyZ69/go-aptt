@@ -67,84 +67,96 @@ func CheckForDynamicSqlQueries(node *ast.File, filename string) []types.Vulnerab
 		}
 		switch stmt := n.(type) {
 
-		// switch stmt := node.(type) {
+		// case *ast.CallExpr:
+		// 	fmt.Println("Looking at the statement as a call expression")
+		// 	if fun, ok := stmt.Fun.(*ast.SelectorExpr); ok {
+		// 		fmt.Println("Got the fun: " + fun.Sel.Name)
+		// 		if ident, ok := fun.X.(*ast.Ident); ok {
+		// 			fmt.Println("Got the identifier: " + ident.Name)
+		// 			if (ident.Name == "db" || ident.Name == "DB" || ident.Name == "sql.DB") && (fun.Sel.Name == "Query" || fun.Sel.Name == "Exec" || fun.Sel.Name == "QueryRow" || fun.Sel.Name == "Where") {
+		// 				fmt.Println("Checking number of arguments")
+		// 				if len(stmt.Args) > 0 {
+		// 				for _, arg := range stmt.Args{
+		// 				fmt.Println("Checking arguments")
+		// 				if basicLit, ok := arg.(*ast.BasicLit); ok {
+		// 					fmt.Println("Got the BasicLit")
+		// 	                            if basicLit.Kind == token.STRING && !(strings.Contains(basicLit.Value, "?") || strings.Contains(basicLit.Value, "$")) {
+		// 			                vulnerabilities = append(vulnerabilities, types.Vulnerability{
+		// 					    Name:        "Possible SQL Injection",
+		// 	                                    Description: "SQL query may be vulnerable to SQL injection due to lack of parameterization",
+		// 			                    File:        filename,
+		// 					    Line:        basicLit.Pos(),
+		// 						})
+		// 					}
+		// 	// If the argument is not basic lit, so it is a variable
+		// 				} else {
+		// 					// if ident, ok := arg.(*ast.Ident); ok {
+		// 								// now somehow check for the variable whether it is used in the func and it is an unsafe query
+		// 							// }	
+		// 						}
+		// 	}
+		// 			}
+		// 			}
+		//
+		// 		}
+		// 	}
+		// 					}
 
-		case *ast.AssignStmt:
-			// case *ast.CallExpr:
-			log.Println("CheckDynamicQueries checking the assing statement")
-			for _, rhs := range stmt.Rhs {
-				fmt.Println("Looping for the right hand side of the assign statement")
-				if call, ok := rhs.(*ast.CallExpr); ok {
-					fmt.Println("Getting the call expression from the statement")
-					if call.Fun == nil {
-						log.Println("Call.Fun is nil in CheckDynamicQueries")
-						return false
-					}
-
-					// TODO: It should probably be *selectorExpr so should handle it that way !
-					switch fun := call.Fun.(type) {
-					case *ast.Ident:
-						fmt.Println("Watching for the type of the function -> ast.Ident")
-						if fun.Name == "Exec" || fun.Name == "Query" {
-							fmt.Println("For some reason it found function call for db without the db")
-							return false
-						}
-
-					case *ast.SelectorExpr:
-						fmt.Println("Watching for the type of function -> selector expression")
-						if ident, ok := fun.X.(*ast.Ident); ok {
-							if ident.Name == "db" || ident.Name == "DB" {
-								fmt.Println("There is the db before it")
-								if fun.Sel.Name == "Exec" || fun.Sel.Name == "Query" {
-									fmt.Println("The func is either Exec or Query")
-									if len(call.Args) >= 1 { // Check if arguments are passed
-										fmt.Println("Length of arguments into the function is greater than 1")
-										// Ensure the SQL query has placeholders
-										if basicLit, ok := call.Args[0].(*ast.BasicLit); ok && (strings.Contains(basicLit.Value, "?") || strings.Contains(basicLit.Value, "$")) {
-											vuln := types.Vulnerability{
-												Name:        "Safe SQL Query",
-												Description: "Query uses parameterized inputs",
-												File:        filename,
-												Line:        basicLit.ValuePos,
-											}
-											log.Println("SQL Queries are alright: report: ", vuln)
-											return true
-											// No vulnerabilities here, parameterized queries are safe
-										} else {
-											vuln := types.Vulnerability{
-												Name:        "Non-Parameterized SQL Query",
-												Description: "Potential SQL injection due to missing parameterized inputs",
-												File:        filename,
-												Line:        basicLit.ValuePos,
-											}
-
-											// Check for string concatenation in the SQL query
-											// for _, arg := range call.Args {
-											// 	if arg == nil {
-											// 		return true
-											// 	}
-											// 	if binaryExpr, ok := arg.(*ast.BinaryExpr); ok {
-											// 		if binaryExpr.Op == token.ADD {
-											// 			vuln := types.Vulnerability{
-											// 				Name:        "Dynamic SQL Query Construction",
-											// 				Description: "Potential SQL injection vulnerability due to dynamic SQL query construction using string concatenation",
-											// 				File:        filename,
-											// 				Line:        binaryExpr.Pos(),
-											// 			}
-											log.Println("Found a dynamic query that could be a problem")
-											vulnerabilities = append(vulnerabilities, vuln)
-											// }
-										}
-									}
-
+		// TODO: Probably I will need to do this similarly to the xss checking so using a map etc...
+		case *ast.CallExpr:
+			fmt.Println("Looking at the statement as a call expression")
+			if fun, ok := stmt.Fun.(*ast.SelectorExpr); ok {
+				fmt.Println("Got the fun: " + fun.Sel.Name)
+				if ident, ok := fun.X.(*ast.Ident); ok {
+					fmt.Println("Got the identifier: " + ident.Name)
+					if (ident.Name == "db" || ident.Name == "DB" || ident.Name == "sql.DB") && (fun.Sel.Name == "Query" || fun.Sel.Name == "Exec" || fun.Sel.Name == "QueryRow") {
+						for _, arg := range stmt.Args {
+							switch argExpr := arg.(type) {
+							case *ast.BasicLit:
+								// Direct string argument without parameterization
+								fmt.Println("Argument is basic lit => direct string")
+								if argExpr.Kind == token.STRING && !(strings.Contains(argExpr.Value, "?") || strings.Contains(argExpr.Value, "$")) {
+									vulnerabilities = append(vulnerabilities, types.Vulnerability{
+										Name:        "Possible SQL Injection",
+										Description: "SQL query may be vulnerable to SQL injection due to lack of parameterization",
+										File:        filename,
+										Line:        argExpr.Pos(),
+									})
 								}
+							case *ast.BinaryExpr:
+								// Detect string concatenation
+								if argExpr.Op == token.ADD {
+									vulnerabilities = append(vulnerabilities, types.Vulnerability{
+										Name:        "Possible SQL Injection",
+										Description: "SQL query is constructed using string concatenation, which may be vulnerable to SQL injection",
+										File:        filename,
+										Line:        argExpr.Pos(),
+									})
+								}
+							case *ast.CallExpr:
+								// Check if fmt.Sprintf or similar is used
+								if fmtFunc, ok := argExpr.Fun.(*ast.SelectorExpr); ok {
+									if pkg, ok := fmtFunc.X.(*ast.Ident); ok && pkg.Name == "fmt" && fmtFunc.Sel.Name == "Sprintf" {
+										vulnerabilities = append(vulnerabilities, types.Vulnerability{
+											Name:        "Possible SQL Injection",
+											Description: "SQL query is constructed using fmt.Sprintf, which may be vulnerable to SQL injection",
+											File:        filename,
+											Line:        argExpr.Pos(),
+										})
+									}
+								}
+							case *ast.Ident:
+								// Further analysis may be needed to determine if the variable is user-controlled
+								// You could add a map to track variable assignments and trace them back to user input
 							}
 						}
 					}
 				}
 			}
-
 		}
+
+		// case 
+
 		return true
 	})
 	return vulnerabilities

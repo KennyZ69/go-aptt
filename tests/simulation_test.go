@@ -17,7 +17,7 @@ func TestCheckForDynamicSqlQueries(t *testing.T) {
 		expectedVulns int
 	}{
 		{
-			name: "Dynamic SQL Query Construction",
+			name: "Dynamic SQL Query Construction with Sprintf",
 			sourceCode: `
 				package main
 				func query(db *sql.DB, username string) {
@@ -27,6 +27,17 @@ func TestCheckForDynamicSqlQueries(t *testing.T) {
 			`,
 			expectedVulns: 1,
 		},
+		{
+			name: "Dynamic SQL Query Construction",
+			sourceCode: `
+				package main
+				func query(db *sql.DB, username string) {
+					db.Exec("SELECT * FROM users WHERE username = " + username)
+				}
+			`,
+			expectedVulns: 1,
+		},
+
 		{
 			name: "Safe SQL Query Construction",
 			sourceCode: `

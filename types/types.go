@@ -5,7 +5,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io"
 	"io/fs"
 	"path/filepath"
 	"strings"
@@ -98,7 +97,7 @@ func IsRenderingDirectly(call *ast.CallExpr) bool {
 	return false
 }
 
-func TestFunc() {
-	pwd := "1234"
-	fmt.Fprintf(io.MultiWriter(), pwd)
-}
+// func TestFunc() {
+// 	pwd := "1234"
+// 	fmt.Fprintf(io.MultiWriter(), pwd)
+// }
