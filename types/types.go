@@ -69,7 +69,7 @@ func IsUserControlledInput(expr ast.Expr) bool {
 			if pkg, ok := fun.X.(*ast.Ident); ok && (pkg.Name == "r" || pkg.Name == "req" || pkg.Name == "request") && (fun.Sel.Name == "Query" || fun.Sel.Name == "FormValue" || fun.Sel.Name == "Body" || fun.Sel.Name == "PostForm") {
 				return true
 			}
-		}	
+		}
 	}
 	return false
 }
@@ -101,3 +101,23 @@ func IsRenderingDirectly(call *ast.CallExpr) bool {
 // 	pwd := "1234"
 // 	fmt.Fprintf(io.MultiWriter(), pwd)
 // }
+
+func UnsafeSqlConstruction(expr ast.Expr) bool {
+	switch x := expr.(type) {
+	case *ast.CallExpr:
+		if fmtFunc, ok := x.Fun.(*ast.SelectorExpr); ok {
+			if pkg, ok := fmtFunc.X.(*ast.Ident); ok && pkg.Name == "fmt" && fmtFunc.Sel.Name == "Sprintf" {
+				return true
+			}
+		}
+	case *ast.BasicLit:
+		if x.Kind == token.STRING && !(strings.Contains(x.Value, "?") || strings.Contains(x.Value, "$")) {
+			return true
+		}
+	case *ast.BinaryExpr:
+		if x.Op == token.ADD {
+			return true
+		}
+	}
+	return false
+}

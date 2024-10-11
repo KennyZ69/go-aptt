@@ -7,3 +7,5 @@
  
 - I could implement the codebase scan as scanning just the code when ran in safe mode for possible secret coded in, dynamic sql queries and possible vulnerable function calls for xss scripting inputs from users
     -> And then I could do these things also in the attack mode so I would run the sql injection and XSS payloads against the user inputs in requests and watch for the outcomes and report afterwards
+
+<!-- TODO: I need to update and finish the sql query construction function because right now I cannot somehow figure out how to check for variables and safety with variables -->

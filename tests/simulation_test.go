@@ -59,6 +59,107 @@ func TestCheckForDynamicSqlQueries(t *testing.T) {
 			`,
 			expectedVulns: 0, // Test should not panic here
 		},
+		{
+			name: "SQL Query with User Input in LIKE Clause",
+			sourceCode: `
+		package main
+		func query(db *sql.DB, name string) {
+			sqlQuery := "SELECT * FROM users WHERE name LIKE '%" + name + "%'"
+			db.Exec(sqlQuery)
+		}
+	`,
+			expectedVulns: 1,
+		},
+		{
+			name: "SQL Injection Prevention using Prepared Statement",
+			sourceCode: `
+		package main
+		func query(db *sql.DB, username string) {
+			stmt, _ := db.Prepare("SELECT * FROM users WHERE username = ?")
+			stmt.Exec(username)
+		}
+	`,
+			expectedVulns: 0,
+		},
+		{
+			name: "Safe SQL Query with LIKE Clause and Placeholder",
+			sourceCode: `
+		package main
+		func query(db *sql.DB, name string) {
+			db.Exec("SELECT * FROM users WHERE name LIKE ?", "%" + name + "%")
+		}
+	`,
+			expectedVulns: 0,
+		},
+		{
+			name: "Dynamic SQL Query with Query Function",
+			sourceCode: `
+		package main
+		func query(db *sql.DB, username string) {
+			query := "SELECT * FROM users WHERE username = '" + username + "'"
+			db.Query(query)
+		}
+	`,
+			expectedVulns: 1,
+		},
+		{
+			name: "Dynamic SQL Query with QueryRow Function",
+			sourceCode: `
+		package main
+		func query(db *sql.DB, username string) {
+			query := "SELECT * FROM users WHERE username = '" + username + "'"
+			db.QueryRow(query)
+		}
+	`,
+			expectedVulns: 1,
+		},
+		{
+			name: "Dynamic SQL Query with Prepare Function",
+			sourceCode: `
+		package main
+		func query(db *sql.DB, username string) {
+			query := "SELECT * FROM users WHERE username = '" + username + "'"
+			stmt, _ := db.Prepare(query)
+			stmt.Query()
+		}
+	`,
+			expectedVulns: 1,
+		},
+		{
+			name: "Dynamic SQL Query with ORM-like Where Function",
+			sourceCode: `
+		package main
+		type DB struct{}
+		func (db *DB) Where(query string) *DB { return db }
+		func (db *DB) Exec() {}
+
+		func query(db *DB, username string) {
+			db.Where("username = '" + username + "'").Exec()
+		}
+	`,
+			expectedVulns: 1,
+		},
+		{
+			name: "Dynamic SQL Query with SQL Transaction",
+			sourceCode: `
+		package main
+		func query(tx *sql.Tx, username string) {
+			query := "DELETE FROM users WHERE username = '" + username + "'"
+			tx.Exec(query)
+		}
+	`,
+			expectedVulns: 1,
+		},
+		{
+			name: "Dynamic SQL Query with QueryRow and Concatenation",
+			sourceCode: `
+		package main
+		func getUser(db *sql.DB, email string) {
+			db.QueryRow("SELECT * FROM users WHERE email = '" + email + "'")
+		}
+	`,
+			expectedVulns: 1,
+		},
 	}
 
 	for _, test := range tests {
@@ -236,9 +337,9 @@ func TestCheckForXSS(t *testing.T) {
 			// if len(vulns) == 0 {
 			// 	t.Errorf("Expected vulnerabilities, but found none")
 			// } else {
-				for _, vuln := range vulns {
-					t.Logf("Found vulnerability: %s at line %d", vuln.Description, vuln.Line)
-				}
+			for _, vuln := range vulns {
+				t.Logf("Found vulnerability: %s at line %d", vuln.Description, vuln.Line)
+			}
 			// }
 			// Check if the number of vulnerabilities matches the expected number
 			if len(vulns) != tt.expectedVulns {

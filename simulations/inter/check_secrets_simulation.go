@@ -14,7 +14,7 @@ import (
 func CheckForSecrets(node *ast.File, fileName string) []types.Vulnerability {
 	var vulnerabilities []types.Vulnerability
 	// secretPattern := regexp.MustCompile(`(?i)(pwd|password|apikey|token|secret|api_key|apiKey|passwd)[^=]*=("|')\w+("|')`)
-	secretPattern := regexp.MustCompile(`(?i)(pwd|password|apikey|token|secret|api_key|apiKey|passwd)$`)
+	secretPattern := regexp.MustCompile(`(?i)(pwd|password|apikey|token|secret|api_key|apiKey|passwd)`)
 
 	// Inspect the AST for hardcoded secrets
 	ast.Inspect(node, func(n ast.Node) bool {
@@ -37,7 +37,7 @@ func CheckForSecrets(node *ast.File, fileName string) []types.Vulnerability {
 					if ident, ok := lhs.(*ast.Ident); ok {
 						fmt.Println("Got the identifier for the lhs")
 						fmt.Println(ident.Name)
-						if secretPattern.MatchString(ident.Name) || strings.Contains(basicLit.Value, "password=") {
+						if secretPattern.MatchString(ident.Name) {
 							fmt.Println("Identifier name matching the secret pattern")
 							vuln := types.Vulnerability{
 								Name:        "Hardcoded Secret",
@@ -59,6 +59,8 @@ func CheckForSecrets(node *ast.File, fileName string) []types.Vulnerability {
 func CheckForDynamicSqlQueries(node *ast.File, filename string) []types.Vulnerability {
 	var vulnerabilities []types.Vulnerability
 	ast.Inspect(node, func(n ast.Node) bool {
+		unsafeCalls := make(map[string]bool)
+		userControlledInputs := make(map[string]bool)
 		// skip node if it is nil, also if the function call or arguments (or each individual argument) is nil, skip them
 
 		if n == nil {
@@ -67,49 +69,35 @@ func CheckForDynamicSqlQueries(node *ast.File, filename string) []types.Vulnerab
 		}
 		switch stmt := n.(type) {
 
-		// case *ast.CallExpr:
-		// 	fmt.Println("Looking at the statement as a call expression")
-		// 	if fun, ok := stmt.Fun.(*ast.SelectorExpr); ok {
-		// 		fmt.Println("Got the fun: " + fun.Sel.Name)
-		// 		if ident, ok := fun.X.(*ast.Ident); ok {
-		// 			fmt.Println("Got the identifier: " + ident.Name)
-		// 			if (ident.Name == "db" || ident.Name == "DB" || ident.Name == "sql.DB") && (fun.Sel.Name == "Query" || fun.Sel.Name == "Exec" || fun.Sel.Name == "QueryRow" || fun.Sel.Name == "Where") {
-		// 				fmt.Println("Checking number of arguments")
-		// 				if len(stmt.Args) > 0 {
-		// 				for _, arg := range stmt.Args{
-		// 				fmt.Println("Checking arguments")
-		// 				if basicLit, ok := arg.(*ast.BasicLit); ok {
-		// 					fmt.Println("Got the BasicLit")
-		// 	                            if basicLit.Kind == token.STRING && !(strings.Contains(basicLit.Value, "?") || strings.Contains(basicLit.Value, "$")) {
-		// 			                vulnerabilities = append(vulnerabilities, types.Vulnerability{
-		// 					    Name:        "Possible SQL Injection",
-		// 	                                    Description: "SQL query may be vulnerable to SQL injection due to lack of parameterization",
-		// 			                    File:        filename,
-		// 					    Line:        basicLit.Pos(),
-		// 						})
-		// 					}
-		// 	// If the argument is not basic lit, so it is a variable
-		// 				} else {
-		// 					// if ident, ok := arg.(*ast.Ident); ok {
-		// 								// now somehow check for the variable whether it is used in the func and it is an unsafe query
-		// 							// }	
-		// 						}
-		// 	}
-		// 			}
-		// 			}
-		//
-		// 		}
-		// 	}
-		// 					}
-
 		// TODO: Probably I will need to do this similarly to the xss checking so using a map etc...
+		case *ast.AssignStmt:
+			fmt.Println("Looking at an assignment statement")
+			// TODO: Have to check whether it is unsafe user controlled input
+			for index, rhs := range stmt.Rhs {
+				fmt.Println("Looking at rhs of an assignstmt")
+				if types.IsUserControlledInput(rhs) {
+					fmt.Println("Is user controlled input and unsafe query construction")
+					lhs := stmt.Lhs[index]
+					if ident, ok := lhs.(*ast.Ident); ok {
+						userControlledInputs[ident.Name] = true
+					}
+				}
+				if types.UnsafeSqlConstruction(rhs) {
+					fmt.Println("Is unsafe sql call")
+					lhs := stmt.Lhs[index]
+					if ident, ok := lhs.(*ast.Ident); ok {
+						unsafeCalls[ident.Name] = true
+					}
+				}
+			}
+
 		case *ast.CallExpr:
 			fmt.Println("Looking at the statement as a call expression")
 			if fun, ok := stmt.Fun.(*ast.SelectorExpr); ok {
 				fmt.Println("Got the fun: " + fun.Sel.Name)
 				if ident, ok := fun.X.(*ast.Ident); ok {
 					fmt.Println("Got the identifier: " + ident.Name)
-					if (ident.Name == "db" || ident.Name == "DB" || ident.Name == "sql.DB") && (fun.Sel.Name == "Query" || fun.Sel.Name == "Exec" || fun.Sel.Name == "QueryRow") {
+					if (ident.Name == "db" || ident.Name == "DB" || ident.Name == "sql.DB" || ident.Name == "tx" || ident.Name == "stmt") && (fun.Sel.Name == "Query" || fun.Sel.Name == "Exec" || fun.Sel.Name == "QueryRow" || fun.Sel.Name == "Prepare") {
 						for _, arg := range stmt.Args {
 							switch argExpr := arg.(type) {
 							case *ast.BasicLit:
@@ -146,6 +134,14 @@ func CheckForDynamicSqlQueries(node *ast.File, filename string) []types.Vulnerab
 									}
 								}
 							case *ast.Ident:
+								if unsafeCalls[argExpr.Name] || userControlledInputs[argExpr.Name] {
+									vulnerabilities = append(vulnerabilities, types.Vulnerability{
+										Name:        "Possible SQL Injection",
+										Description: "SQL query is constructed using variable which was not properly sanitized from possible sql injection vulnerability",
+										File:        filename,
+										Line:        argExpr.Pos(),
+									})
+								}
 								// Further analysis may be needed to determine if the variable is user-controlled
 								// You could add a map to track variable assignments and trace them back to user input
 							}
@@ -155,7 +151,7 @@ func CheckForDynamicSqlQueries(node *ast.File, filename string) []types.Vulnerab
 			}
 		}
 
-		// case 
+		// case
 
 		return true
 	})
@@ -179,8 +175,8 @@ func CheckForXSSPossibilities(node *ast.File, filename string) []types.Vulnerabi
 				if isUControlInput {
 					fmt.Println("Found out it is user controlled input")
 					lhs := x.Lhs[index]
-						if ident, ok := lhs.(*ast.Ident); ok {
-							userControlledArgs[ident.Name] = true
+					if ident, ok := lhs.(*ast.Ident); ok {
+						userControlledArgs[ident.Name] = true
 					}
 				}
 			}
