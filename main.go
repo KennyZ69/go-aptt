@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/KennyZ69/go-aptt/simulations/dbs"
+	"github.com/KennyZ69/go-aptt/simulations/ddos"
 	"github.com/KennyZ69/go-aptt/simulations/inter"
 	"github.com/KennyZ69/go-aptt/types"
 	_ "github.com/lib/pq"
@@ -14,9 +16,11 @@ import (
 
 var (
 	helpCommand  = flag.Bool("help", false, "Usage: ")
+	simsCommand  = flag.Bool("sims", false, "Specific simulation tests: ")
 	codebaseTest = flag.Bool("codebase", false, "Run Security Scan on provided codebase (given file or directory)")
 	networkTest  = flag.Bool("network", false, "Run Security Scan on network with given address")
 	dbTest       = flag.Bool("db", false, "Run Security Scan on database with given host, user, port and type")
+	runCommand   = flag.Bool("run", false, "Specify what exact simulation test you want to run")
 )
 
 func main() {
@@ -39,7 +43,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	if !*codebaseTest && !*dbTest && !*networkTest {
+	if !*codebaseTest && !*dbTest && !*networkTest && !*helpCommand && !*simsCommand {
 		fmt.Println("Error: None or bad flags provided. You must provide one flag: --codebase --database --network")
 		os.Exit(-1)
 	}
@@ -47,11 +51,6 @@ func main() {
 	if (*codebaseTest && *dbTest) || (*codebaseTest && *networkTest) || (*dbTest && *networkTest) {
 		fmt.Println("Error: Multiple flags provided. Use just one flag at a time")
 		os.Exit(-1)
-	}
-
-	if len(args) == 0 {
-		fmt.Println("Error: No target provided. Please specify the target (e.g., directory, database URL, network range).")
-		os.Exit(1)
 	}
 
 	// target := args[0]
@@ -63,13 +62,27 @@ func main() {
 	--codebase  [target] : Scan the codebase from a given directory (or file)
 	--[command] --safe   : Run the security scans in safe mode so without attacking against provided base
 	--[command] --attack : Run the security scans in attack mode so it uses malicious code against provided base in a sandbox enviroment
+
+	These are the thorough simulations / tests, if You want to run something more specific run --sims
+	
+	If you have a .env file and are running tests in attack mode you should provided it using --env [path to your .env file]
 `)
 		os.Exit(0)
+	}
+
+	if *simsCommand {
+		fmt.Print(`
+	--dos [target app] [target url] : Run the DoS simulation in an isolated docker enviroment against a copy of your provided app (codebase) 
+			`)
 	}
 
 	var vulns_report []types.Vulnerability
 
 	if *codebaseTest {
+		if len(args) == 0 {
+			fmt.Println("Error: No target provided. Please specify the target (e.g., directory, database URL, network range).")
+			os.Exit(1)
+		}
 		targetBase := args[0]
 		// fmt.Println(targetBase)
 		vulns, err := inter.Codebase_scan(targetBase)
@@ -95,7 +108,27 @@ func main() {
 	}
 
 	if *networkTest {
+		if len(args) == 0 {
+			fmt.Println("Error: No target provided. Please specify the target (e.g., directory, database URL, network range).")
+			os.Exit(1)
+		}
 		// run the network test
+	}
+
+	if *runCommand {
+		if len(args) == 0 {
+			fmt.Println("Error: No specified simulation test to be ran, please use an exact test function name")
+			os.Exit(1)
+		}
+
+		fun := args[1]
+		switch fun {
+		case "dos":
+			url := args[2]
+			numReq, _ := strconv.Atoi(args[3])
+			concurrency, _ := strconv.Atoi(args[4])
+			ddos.DosAttack(url, numReq, concurrency)
+		}
 	}
 
 	fmt.Println("Creating scan.log file")
