@@ -43,7 +43,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	if !*codebaseTest && !*dbTest && !*networkTest && !*helpCommand && !*simsCommand {
+	if !*codebaseTest && !*dbTest && !*networkTest && !*helpCommand && !*simsCommand && !*runCommand {
 		fmt.Println("Error: None or bad flags provided. You must provide one flag: --codebase --database --network")
 		os.Exit(-1)
 	}
@@ -121,16 +121,19 @@ func main() {
 			os.Exit(1)
 		}
 
-		fun := args[1]
+		fun := args[0]
 		switch fun {
 		case "dos":
-			url := args[2]
-			numReq, _ := strconv.Atoi(args[3])
-			concurrency, _ := strconv.Atoi(args[4])
+			url := args[1]
+			numReq, _ := strconv.Atoi(args[2])
+			concurrency, _ := strconv.Atoi(args[3])
 			ddos.DosAttack(url, numReq, concurrency)
+			os.Exit(0)
+			return
 		}
 	}
 
+	// I want to make this scan.log just for vulnerabilities from static tests, so every simulation will exit in their own condition
 	fmt.Println("Creating scan.log file")
 	f, err := os.Create("scan.log")
 	if err != nil {

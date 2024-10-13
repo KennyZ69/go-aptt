@@ -4,22 +4,34 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
 
+type RequestResult struct {
+	Success    bool
+	StatusCode int
+	RespTime   time.Duration
+	Error      error
+}
+
 var (
-	failedReq = 0
-	totalReq  = 0
-	totalTime time.Duration
-	mu        sync.Mutex
+	successfulReq = 0
+	failedReq     = 0
+	totalReq      = 0
+	totalTime     time.Duration
+	mu            sync.Mutex
+	statusCodes   = make(map[int]int)
 )
 
-func SendReq(wg *sync.WaitGroup, url string) {
+func SendReq(wg *sync.WaitGroup, url string) RequestResult {
 	defer wg.Done()
 	start := time.Now()
 	resp, err := http.Get(url)
 	elapsed := time.Since(start)
+
+	var result RequestResult
 
 	mu.Lock()
 	totalReq++
@@ -27,14 +39,34 @@ func SendReq(wg *sync.WaitGroup, url string) {
 
 	if err != nil && resp.StatusCode != 200 {
 		failedReq++
-		fmt.Println("Error: DoS_script.go: ", err)
+		statusCodes[resp.StatusCode]++
+		result = RequestResult{
+			Success:    false,
+			StatusCode: resp.StatusCode,
+			RespTime:   elapsed,
+			Error:      err,
+		}
+		// fmt.Println("Error: DoS_script.go: ", err)
+	} else {
+		defer resp.Body.Close()
+		successfulReq++
+		statusCodes[resp.StatusCode]++
+		result = RequestResult{
+			Success:    true,
+			StatusCode: resp.StatusCode,
+			RespTime:   elapsed,
+			Error:      nil,
+		}
 	}
 	mu.Unlock()
+	return result
 }
 
 func DosAttack(url string, numRequests, concurrency int) {
+	log.Println("Starting the DoS attack simulation test on: ", url)
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, concurrency)
+	var results []RequestResult
 
 	for i := 0; i < numRequests; i++ {
 		wg.Add(1)
@@ -42,15 +74,54 @@ func DosAttack(url string, numRequests, concurrency int) {
 
 		go func() {
 			defer func() { <-semaphore }() // free up a slot on the semaphore channel
-			SendReq(&wg, url)
+			res := SendReq(&wg, url)
+			results = append(results, res)
 		}()
 	}
 
 	wg.Wait() // wait for all request to complete
-	// slog.Log("DoS attack simulation completed.")
-	log.Println("DoS attack simulation completed.")
-	fmt.Printf("Total requests: %d\n", totalReq)
-	fmt.Printf("Failed requests: %d\n", failedReq)
-	fmt.Printf("Average response time: %v\n", totalTime/time.Duration(totalReq))
 
+	generateReport(concurrency)
+}
+
+func generateReport(concurrency int) {
+	avgRespTime := totalTime / time.Duration(successfulReq)
+	failRate := float64(failedReq) / float64(totalReq) * 100
+
+	// make the report var for saving into the sim log file
+	report := fmt.Sprintf(`
+	======== DoS Attack Simulation Report ========
+	Total Requests: %d
+	Concurrency Level: %d
+	Successful Requests: %d
+	Failed Requests: %d
+	Failure Rate: %.2f%%
+	Average Response Time: %v
+	==============================================
+`, totalReq, concurrency, successfulReq, failedReq, failRate, avgRespTime)
+
+	log.Print(report)
+
+	for code, count := range statusCodes {
+		fmt.Printf("Status Code %d: %d responses\n", code, count)
+	}
+
+	log.Println("DoS Attack Simulation ended. You can find the saved report in the 'dos_sim_report.log'. ")
+
+	saveReportToFile(report, "dos_sim_report.log")
+}
+
+func saveReportToFile(report, filename string) {
+	file, err := os.Create(filename)
+	if err != nil {
+		log.Fatalf("Error creating the %s file: %v\n", filename, err)
+		return
+	}
+	defer file.Close()
+
+	_, err = fmt.Fprint(file, report)
+	if err != nil {
+		log.Fatalf("Error writing to the %s file using Fprintf: %v\n", filename, err)
+		return
+	}
 }
