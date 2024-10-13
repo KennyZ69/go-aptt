@@ -81,10 +81,10 @@ func DosAttack(url string, numRequests, concurrency int) {
 
 	wg.Wait() // wait for all request to complete
 
-	generateReport(concurrency)
+	generateReport(concurrency, url)
 }
 
-func generateReport(concurrency int) {
+func generateReport(concurrency int, url string) {
 	avgRespTime := totalTime / time.Duration(successfulReq)
 	failRate := float64(failedReq) / float64(totalReq) * 100
 
@@ -106,7 +106,7 @@ func generateReport(concurrency int) {
 		fmt.Printf("Status Code %d: %d responses\n", code, count)
 	}
 
-	log.Println("DoS Attack Simulation ended. You can find the saved report in the 'dos_sim_report.log'. ")
+	log.Printf("DoS Attack Simulation ended on %s. You can find the saved report in the 'dos_sim_report.log'. \n", url)
 
 	saveReportToFile(report, "dos_sim_report.log")
 }

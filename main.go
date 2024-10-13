@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"strconv"
+	"strings"
 
 	"github.com/KennyZ69/go-aptt/simulations/dbs"
 	"github.com/KennyZ69/go-aptt/simulations/ddos"
@@ -72,7 +74,13 @@ func main() {
 
 	if *simsCommand {
 		fmt.Print(`
-	--dos [target app] [target url] : Run the DoS simulation in an isolated docker enviroment against a copy of your provided app (codebase) 
+	First run the command --run followed by the type of test simulation you want to run:
+
+	If you want to run the DoS test you have two options ->	
+	-> --run dos [language] [target app] [number of requests] [concurrency of requests (e.g. 50)] : 
+		Run the DoS simulation in an isolated docker enviroment against a copy of your provided app
+	-> --run dos [target url] [num of reqs] [concurrency] [possibly endpoint]:
+		Run the DoS simulation against your running app if you dont worry about it crashing for example
 			`)
 	}
 
@@ -124,12 +132,48 @@ func main() {
 		fun := args[0]
 		switch fun {
 		case "dos":
-			url := args[1]
-			numReq, _ := strconv.Atoi(args[2])
-			concurrency, _ := strconv.Atoi(args[3])
-			ddos.DosAttack(url, numReq, concurrency)
-			os.Exit(0)
-			return
+			if strings.Contains(args[1], "http") {
+				url := args[1]
+				numReq, _ := strconv.Atoi(args[2])
+				concurrency, _ := strconv.Atoi(args[3])
+				ddos.DosAttack(url, numReq, concurrency)
+				os.Exit(0)
+				return
+			} else {
+				lang := args[1]
+				target := args[2]
+				numReq, _ := strconv.Atoi(args[3])
+				concurrency, _ := strconv.Atoi(args[4])
+				var endpoint string
+				if args[5] != "" {
+					endpoint = args[5]
+				}
+				dockerfile := selectDockerFile(lang)
+				log.Println("Starting to build the Docker image for the enviroment")
+				cmd := exec.Command("docker", "build", "-f", dockerfile, "-t", "user-app", target)
+				err := cmd.Run()
+				if err != nil {
+					log.Println("There was an error when running the docker processes")
+					cleanupDocker()
+					log.Fatalf("Error building Docker image: %v\n", err)
+					os.Exit(1)
+					return
+				}
+				log.Println("Starting the Docker container on port 8080")
+				err = exec.Command("docker", "run", "-d", "-p", "8080:8080", "--name", "user-app-container", "user-app").Run()
+				if err != nil {
+					log.Println("There was an error when running the docker processes")
+					cleanupDocker()
+					log.Fatalf("Error running the Docker image: %v\n", err)
+					os.Exit(1)
+					return
+				}
+
+				ddos.DosAttack(fmt.Sprintf("http://localhost:8080%s", endpoint), numReq, concurrency)
+				cleanupDocker()
+				os.Exit(0)
+				return
+			}
 		}
 	}
 
@@ -152,4 +196,35 @@ func main() {
 	}
 
 	os.Exit(0)
+}
+
+func selectDockerFile(language string) string {
+	switch language {
+	case "node":
+	case "javascript":
+	case "js":
+	case "typescript":
+	case "ts":
+		return "dockerfiles/Dockerfile-node"
+	case "go":
+		return "dockerfiles/Dockerfile-go"
+	case "python":
+		return "dockerfiles/Dockerfile-python"
+	default:
+		log.Fatalf(`
+	Unsupported language: %s
+	Provide one of these: 'node', 'go', 'python'
+`, language)
+	}
+	return ""
+}
+
+func cleanupDocker() {
+	log.Print(`
+	========= Cleaning the docker containers and images =========
+`)
+	exec.Command("docker", "stop", "user-app-container").Run()
+	exec.Command("docker", "rm", "user-app-container").Run()
+	exec.Command("docker", "rmi", "user-app").Run()
+	exec.Command("docker", "builder", "prune", "-f").Run() // -f to force confirmation
 }
