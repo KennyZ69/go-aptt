@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"log"
@@ -80,8 +81,9 @@ func main() {
 	-> --run dos [language] [target app] [number of requests] [concurrency of requests (e.g. 50)] : 
 		Run the DoS simulation in an isolated docker enviroment against a copy of your provided app
 	-> --run dos [target url] [num of reqs] [concurrency] [possibly endpoint]:
-		Run the DoS simulation against your running app if you dont worry about it crashing for example
-			`)
+		Run the DoS simulation against your running app if you dont worry about it crashing for 
+`)
+		os.Exit(0)
 	}
 
 	var vulns_report []types.Vulnerability
@@ -144,12 +146,16 @@ func main() {
 				target := args[2]
 				numReq, _ := strconv.Atoi(args[3])
 				concurrency, _ := strconv.Atoi(args[4])
-				var endpoint string
-				if args[5] != "" {
+				endpoint := ""
+				if len(args) == 6 {
 					endpoint = args[5]
 				}
-				dockerfile := selectDockerFile(lang)
-				log.Println("Starting to build the Docker image for the enviroment")
+				dockerfile := selectDockerFile(lang, target)
+				if dockerfile == "" {
+					os.Exit(1)
+					return
+				}
+				log.Println("Starting to build the Docker image for the enviroment from " + dockerfile)
 				cmd := exec.Command("docker", "build", "-f", dockerfile, "-t", "user-app", target)
 				err := cmd.Run()
 				if err != nil {
@@ -198,7 +204,7 @@ func main() {
 	os.Exit(0)
 }
 
-func selectDockerFile(language string) string {
+func selectDockerFile(language, target string) string {
 	switch language {
 	case "node":
 	case "javascript":
@@ -207,6 +213,31 @@ func selectDockerFile(language string) string {
 	case "ts":
 		return "dockerfiles/Dockerfile-node"
 	case "go":
+		version, err := getGoVersion(target + "/go.mod")
+		if err != nil {
+			fmt.Println("Error in getting the go version: " + err.Error())
+			return ""
+		}
+		data := fmt.Sprintf(`
+# Base image with Go installed
+FROM golang:%s
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy the application source code into the container
+COPY . %s
+
+# Build the Go app
+RUN go build -o userapp 
+
+# Expose port 8080 (or the port the user app listens to)
+EXPOSE 8080
+
+# Command to run the application
+CMD ["./userapp"]
+			`, version, target)
+		os.WriteFile("dockerfiles/Dockerfile-go", []byte(data), 0666)
 		return "dockerfiles/Dockerfile-go"
 	case "python":
 		return "dockerfiles/Dockerfile-python"
@@ -227,4 +258,26 @@ func cleanupDocker() {
 	exec.Command("docker", "rm", "user-app-container").Run()
 	exec.Command("docker", "rmi", "user-app").Run()
 	exec.Command("docker", "builder", "prune", "-f").Run() // -f to force confirmation
+}
+
+func getGoVersion(target string) (string, error) {
+	file, err := os.Open(target)
+	if err != nil {
+		return "", fmt.Errorf("Error: getting the go version from go.mod file: %v", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		// to find the version i can look for line starting with "go"
+		line := scanner.Text()
+
+		if strings.HasPrefix(line, "go") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "go")), nil
+		}
+	}
+	if err = scanner.Err(); err != nil {
+		return "", fmt.Errorf("Error: could not read the go.mod file correctly: %v", err)
+	}
+	return "", fmt.Errorf("No go version was found\n")
 }

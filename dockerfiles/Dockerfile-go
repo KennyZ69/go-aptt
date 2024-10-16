@@ -1,5 +1,6 @@
+
 # Base image with Go installed
-FROM golang:1.18
+FROM golang:1.22.7
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -8,10 +9,11 @@ WORKDIR /app
 COPY . .
 
 # Build the Go app
-RUN go build -o userapp .
+RUN go build -o userapp 
 
 # Expose port 8080 (or the port the user app listens to)
 EXPOSE 8080
 
 # Command to run the application
 CMD ["./userapp"]
+			
