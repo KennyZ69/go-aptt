@@ -98,7 +98,9 @@ func generateReport(concurrency int, url string) {
 	Failure Rate: %.2f%%
 	Average Response Time: %v
 	==============================================
-`, totalReq, concurrency, successfulReq, failedReq, failRate, avgRespTime)
+	
+	Ran on %v.
+`, totalReq, concurrency, successfulReq, failedReq, failRate, avgRespTime, time.Now().Format(time.ANSIC))
 
 	log.Print(report)
 

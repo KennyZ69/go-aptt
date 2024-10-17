@@ -146,10 +146,10 @@ func main() {
 				target := args[2]
 				numReq, _ := strconv.Atoi(args[3])
 				concurrency, _ := strconv.Atoi(args[4])
-				endpoint := ""
-				if len(args) == 6 {
-					endpoint = args[5]
-				}
+				// endpoint := ""
+				// if len(args) == 6 {
+				// endpoint = args[5]
+				// }
 				dockerfile := selectDockerFile(lang, target)
 				if dockerfile == "" {
 					os.Exit(1)
@@ -166,7 +166,8 @@ func main() {
 					return
 				}
 				log.Println("Starting the Docker container on port 8080")
-				err = exec.Command("docker", "run", "-d", "-p", "8080:8080", "--name", "user-app-container", "user-app").Run()
+				// somehow I should probably get the port on which the users app runs
+				err = exec.Command("docker", "run", "-d", "-p", "8080:1769", "--name", "user-app-container", "user-app").Run()
 				if err != nil {
 					log.Println("There was an error when running the docker processes")
 					cleanupDocker()
@@ -174,8 +175,19 @@ func main() {
 					os.Exit(1)
 					return
 				}
+				url := fmt.Sprintf("http://localhost:8080")
+				conc := strconv.Itoa(concurrency)
+				nReq := strconv.Itoa(numReq)
+				err = exec.Command("./go-aptt", "--run", "dos", url, nReq, conc).Run()
+				if err != nil {
+					log.Fatalf("Error running './go-aptt --run dos %s %s %s' after building the docker enviroment", url, nReq, conc)
+				}
+				// ddos.DosAttack(url, numReq, concurrency)
+				log.Print(`
 
-				ddos.DosAttack(fmt.Sprintf("http://localhost:8080%s", endpoint), numReq, concurrency)
+	DoS test on your app in docker enviroment went successfully, you can look at your report in dos_sim_report.log
+`)
+				// exec.Command("cat", "dos_sim_report.log").Run()
 				cleanupDocker()
 				os.Exit(0)
 				return
@@ -213,14 +225,24 @@ func selectDockerFile(language, target string) string {
 	case "ts":
 		return "dockerfiles/Dockerfile-node"
 	case "go":
-		version, err := getGoVersion(target + "/go.mod")
-		if err != nil {
-			fmt.Println("Error in getting the go version: " + err.Error())
-			return ""
+		if _, err := os.Stat("dockerfiles"); os.IsNotExist(err) {
+			err = os.Mkdir("dockerfiles", 0755)
+			if err != nil {
+				log.Fatalf("Error creating the dockerfiles directory: %v\n", err)
+			}
+			fmt.Println("Created the dockerfiles dir")
 		}
-		data := fmt.Sprintf(`
+
+		if _, err := os.Stat("dockerfiles/Dockerfile-go"); os.IsNotExist(err) {
+			version, err := getGoVersion(target + "/go.mod")
+			fmt.Println("Got the go version from go.mod file")
+			if err != nil {
+				fmt.Println("Error in getting the go version: " + err.Error())
+				return ""
+			}
+			data := fmt.Sprintf(`
 # Base image with Go installed
-FROM golang:%s-alpine as builder
+FROM golang:%s-alpine
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -235,22 +257,19 @@ COPY . %s
 # Build the Go app
 RUN go build -o userapp 
 
-FROM alpine:latest
-
-
-# Set the working directory
-WORKDIR /root/
-
-# Copy the compiled Go binary from the builder stage
-COPY --from=builder /app/user-app .
-
 # Expose port 8080 (or the port the user app listens to)
 EXPOSE 8080
 
 # Command to run the application
 CMD ["./userapp"]
 			`, version, target)
-		os.WriteFile("dockerfiles/Dockerfile-go", []byte(data), 0666)
+
+			err = os.WriteFile("dockerfiles/Dockerfile-go", []byte(data), 0644)
+			if err != nil {
+				log.Fatalf("Error writing into dockerfiles/Dockerfile-go: %v\n", err)
+			}
+			fmt.Println("Wrote the dockerfile needed")
+		}
 		return "dockerfiles/Dockerfile-go"
 	case "python":
 		return "dockerfiles/Dockerfile-python"
@@ -264,7 +283,7 @@ CMD ["./userapp"]
 }
 
 func cleanupDocker() {
-	log.Print(`
+	fmt.Print(`
 	========= Cleaning the docker containers and images =========
 `)
 	exec.Command("docker", "stop", "user-app-container").Run()
