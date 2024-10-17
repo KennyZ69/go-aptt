@@ -156,7 +156,7 @@ func main() {
 					return
 				}
 				log.Println("Starting to build the Docker image for the enviroment from " + dockerfile)
-				cmd := exec.Command("docker", "build", "-f", dockerfile, "-t", "user-app", target)
+				cmd := exec.Command("docker", "build", "--progress=plain", "-f", dockerfile, "-t", "user-app", target)
 				err := cmd.Run()
 				if err != nil {
 					log.Println("There was an error when running the docker processes")
@@ -220,16 +220,29 @@ func selectDockerFile(language, target string) string {
 		}
 		data := fmt.Sprintf(`
 # Base image with Go installed
-FROM golang:%s
+FROM golang:%s-alpine as builder
 
 # Set the working directory inside the container
 WORKDIR /app
+
+COPY go.mod go.sum ./
+
+RUN go mod download
 
 # Copy the application source code into the container
 COPY . %s
 
 # Build the Go app
 RUN go build -o userapp 
+
+FROM alpine:latest
+
+
+# Set the working directory
+WORKDIR /root/
+
+# Copy the compiled Go binary from the builder stage
+COPY --from=builder /app/user-app .
 
 # Expose port 8080 (or the port the user app listens to)
 EXPOSE 8080
