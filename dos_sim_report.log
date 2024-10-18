@@ -1,9 +1,11 @@
 
 	======== DoS Attack Simulation Report ========
-	Total Requests: 10000
-	Concurrency Level: 2000
-	Successful Requests: 10000
-	Failed Requests: 0
-	Failure Rate: 0.00%
-	Average Response Time: 135.130825ms
+	Total Requests: 1000
+	Concurrency Level: 200
+	Successful Requests: 366
+	Failed Requests: 634
+	Failure Rate: 63.40%
+	Average Success Response Time: 7.055153531s
 	==============================================
+	
+	Ran on Fri Oct 18 23:05:30 2024.

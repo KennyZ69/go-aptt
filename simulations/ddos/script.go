@@ -37,7 +37,15 @@ func SendReq(wg *sync.WaitGroup, url string) RequestResult {
 	totalReq++
 	totalTime += elapsed
 
-	if err != nil && resp.StatusCode != 200 {
+	if err != nil || resp == nil {
+		failedReq++
+		result = RequestResult{
+			Success:    false,
+			StatusCode: 0, // No valid status code available
+			RespTime:   elapsed,
+			Error:      err,
+		}
+	} else if resp.StatusCode != 200 {
 		failedReq++
 		statusCodes[resp.StatusCode]++
 		result = RequestResult{
@@ -85,8 +93,18 @@ func DosAttack(url string, numRequests, concurrency int) {
 }
 
 func generateReport(concurrency int, url string) {
-	avgRespTime := totalTime / time.Duration(successfulReq)
-	failRate := float64(failedReq) / float64(totalReq) * 100
+	var avgRespTime time.Duration
+	if successfulReq == 0 {
+		avgRespTime = time.Duration(0)
+	} else {
+		avgRespTime = totalTime / time.Duration(successfulReq)
+	}
+	var failRate float64
+	if totalReq == 0 {
+		failRate = float64(0)
+	} else {
+		failRate = float64(failedReq) / float64(totalReq) * 100
+	}
 
 	// make the report var for saving into the sim log file
 	report := fmt.Sprintf(`
@@ -96,7 +114,7 @@ func generateReport(concurrency int, url string) {
 	Successful Requests: %d
 	Failed Requests: %d
 	Failure Rate: %.2f%%
-	Average Response Time: %v
+	Average Success Response Time: %v
 	==============================================
 	
 	Ran on %v.
