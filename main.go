@@ -14,6 +14,7 @@ import (
 	"github.com/KennyZ69/go-aptt/simulations/ddos"
 	"github.com/KennyZ69/go-aptt/simulations/inter"
 	"github.com/KennyZ69/go-aptt/types"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
@@ -28,6 +29,12 @@ var (
 )
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Println("There was an error loading the .env file: ", err)
+	}
+	torControlPassword := os.Getenv("TOR_CONTROL_PASSWORD")
+	fmt.Println(torControlPassword)
 
 	var modeCommand string
 	flag.StringVar(&modeCommand, "test_mode", "safe", "specify the mode in what you want to run the test: safe / attack")
@@ -139,7 +146,7 @@ func main() {
 				url := args[1]
 				numReq, _ := strconv.Atoi(args[2])
 				concurrency, _ := strconv.Atoi(args[3])
-				ddos.DosAttack(url, numReq, concurrency)
+				ddos.DosAttack(url, numReq, concurrency, torControlPassword)
 				os.Exit(0)
 				return
 			} else {
