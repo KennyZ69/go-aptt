@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"go/printer"
 	"log"
 	"os"
 	"os/exec"
@@ -34,7 +35,6 @@ func main() {
 		fmt.Println("There was an error loading the .env file: ", err)
 	}
 	torControlPassword := os.Getenv("TOR_CONTROL_PASSWORD")
-	fmt.Println(torControlPassword)
 
 	var modeCommand string
 	flag.StringVar(&modeCommand, "test_mode", "safe", "specify the mode in what you want to run the test: safe / attack")
@@ -90,6 +90,11 @@ func main() {
 		Run the DoS simulation in an isolated docker enviroment against a copy of your provided app
 	-> --run dos [target url] [num of reqs] [concurrency] [possibly endpoint]:
 		Run the DoS simulation against your running app if you dont worry about it crashing for 
+			**DISCLAIMER** : Do not run this on your production app if you are not sure whether it would do any harm
+	-> --run sqli [targer url]:
+	-> --run sqli [target codebase]: (ran in sandbox)
+		Run the SQL Injection simulation against your app (finding the possible inputs), providing feedback
+			**DISCLAIMER** : Do not run this on your production app if you are not sure whether it would do any harm
 `)
 		os.Exit(0)
 	}
@@ -131,11 +136,15 @@ func main() {
 			os.Exit(1)
 		}
 		// run the network test
+		log.Println("Starting the network tests")
 	}
 
 	if *runCommand {
 		if len(args) == 0 {
 			fmt.Println("Error: No specified simulation test to be ran, please use an exact test function name")
+			os.Exit(1)
+		} else if len(args) < 2 {
+			fmt.Println("You need to specify some arguments for these types of simulations: to see more details run: --sims")
 			os.Exit(1)
 		}
 
@@ -207,6 +216,20 @@ func main() {
 				os.Exit(0)
 				return
 			}
+
+		case "sqli":
+			var url string
+			var codebase string
+			if strings.Contains(url, "http") {
+				url = args[1]
+				println(url)
+			} else {
+				codebase = args[1]
+				println(codebase)
+			}
+			// here I should now try to somehow discover the possible input endpoints for the running app on provided url
+			// TODO: could remake this into switch with cases, yeah that would be better for sure
+
 		}
 	}
 
