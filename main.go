@@ -14,6 +14,7 @@ import (
 	"github.com/KennyZ69/go-aptt/simulations/dbs"
 	"github.com/KennyZ69/go-aptt/simulations/ddos"
 	"github.com/KennyZ69/go-aptt/simulations/inter"
+	"github.com/KennyZ69/go-aptt/simulations/sqli"
 	"github.com/KennyZ69/go-aptt/types"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -218,15 +219,23 @@ func main() {
 			}
 
 		case "sqli":
-			var url string
-			var codebase string
-			if strings.Contains(url, "http") {
-				url = args[1]
-				println(url)
-			} else {
-				codebase = args[1]
-				println(codebase)
+			arg1 := args[1]
+
+			// switch strings.Contains(arg1, "http") {
+			switch strings.HasPrefix(arg1, "http") {
+
+			case true:
+				url := arg1
+				err := sqli.SqlIn(url)
+				if err != nil {
+					log.Fatalf("Error running the SQL Injection simulation tests on %s: %v\n", url, err)
+					os.Exit(1)
+				}
+
+			case false:
+				codebase := arg1
 			}
+
 			// here I should now try to somehow discover the possible input endpoints for the running app on provided url
 			// TODO: could remake this into switch with cases, yeah that would be better for sure
 
