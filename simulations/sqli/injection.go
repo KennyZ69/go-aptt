@@ -61,12 +61,15 @@ func crawlForLinks(url string) []string {
 			return links // error node => end of the file so should stop iterating
 
 		case tt == html.StartTagToken:
+			fmt.Println("Getting the token when iterating")
 			token := tokenizer.Token()
 			if token.Data == "a" {
+				fmt.Println("Found the 'a' tag")
 				for _, attr := range token.Attr {
 					if attr.Key == "href" {
 
 						link := attr.Val
+						fmt.Println("Got the link: ", link)
 						if !strings.HasPrefix(link, "http") {
 							link = fmt.Sprintf("%s/%s", url, strings.TrimPrefix(link, "/"))
 						}
@@ -75,6 +78,7 @@ func crawlForLinks(url string) []string {
 							seen[link] = true
 							links = append(links, link)
 							// trying recursion (calling the func on itself) to find subpath on the found link
+							fmt.Println("Doing recursion to find endpoints on this find")
 							links = append(links, crawlForLinks(link)...)
 						}
 					}
