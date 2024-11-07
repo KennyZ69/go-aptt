@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"go/printer"
 	"log"
 	"os"
 	"os/exec"
@@ -226,14 +225,21 @@ func main() {
 
 			case true:
 				url := arg1
+				links := sqli.CrawlForLinks(url)
 				err := sqli.SqlIn(url)
 				if err != nil {
 					log.Fatalf("Error running the SQL Injection simulation tests on %s: %v\n", url, err)
 					os.Exit(1)
 				}
+				log.Println("All discovered links: ")
+				for _, link := range links {
+					fmt.Println(link)
+				}
+				log.Println("Finishing testing the sqli sim...")
+				os.Exit(0)
 
 			case false:
-				codebase := arg1
+				// codebase := arg1
 			}
 
 			// here I should now try to somehow discover the possible input endpoints for the running app on provided url
