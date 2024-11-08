@@ -157,7 +157,6 @@ func main() {
 				concurrency, _ := strconv.Atoi(args[3])
 				ddos.DosAttack(url, numReq, concurrency, torControlPassword)
 				os.Exit(0)
-				return
 			} else {
 				lang := args[1]
 				target := args[2]
@@ -172,7 +171,6 @@ func main() {
 				dockerfile := selectDockerFile(lang, target, port)
 				if dockerfile == "" {
 					os.Exit(1)
-					return
 				}
 				log.Println("Starting to build the Docker image for the enviroment from " + dockerfile)
 				cmd := exec.Command("docker", "build", "-f", dockerfile, "-t", "user-app", target)
@@ -182,8 +180,6 @@ func main() {
 					cleanupDocker()
 					// cleanupDocker(*pruneAllCmd)
 					log.Fatalf("Error building Docker image: %v\n", err)
-					os.Exit(1)
-					return
 				}
 				log.Printf("Starting the Docker container on port 8080:%s\n", port)
 				// somehow I should probably get the port on which the users app runs
@@ -193,7 +189,6 @@ func main() {
 					cleanupDocker()
 					// cleanupDocker(*pruneAllCmd)
 					log.Fatalf("Error running the Docker image: %v\n", err)
-					return
 				}
 				url := "http://localhost:8080"
 				conc := strconv.Itoa(concurrency)
@@ -203,7 +198,7 @@ func main() {
 					cleanupDocker()
 					// cleanupDocker(*pruneAllCmd)
 					log.Fatalf("Error running './go-aptt --run dos %s %s %s' after building the docker enviroment: %v\n", url, nReq, conc, err)
-					return
+					os.Exit(1)
 				}
 				// ddos.DosAttack(url, numReq, concurrency)
 				log.Print(`
@@ -219,27 +214,22 @@ func main() {
 
 		case "sqli":
 			arg1 := args[1]
-
 			// switch strings.Contains(arg1, "http") {
 			switch strings.HasPrefix(arg1, "http") {
-
 			case true:
 				url := arg1
-				links := sqli.CrawlForLinks(url)
+				log.Println("Starting the sqli sim on ", url)
 				err := sqli.SqlIn(url)
 				if err != nil {
-					log.Fatalf("Error running the SQL Injection simulation tests on %s: %v\n", url, err)
+					log.Fatalf("Error in running the sql injection simulatin on %s: %v\n", url, err)
 					os.Exit(1)
 				}
-				log.Println("All discovered links: ")
-				for _, link := range links {
-					fmt.Println(link)
-				}
-				log.Println("Finishing testing the sqli sim...")
+				log.Printf("Finished testing the sqli sim on: %s\n", url)
 				os.Exit(0)
 
 			case false:
 				// codebase := arg1
+				log.Println("Starting simulating sql injection in a docker enviroment")
 			}
 
 			// here I should now try to somehow discover the possible input endpoints for the running app on provided url
