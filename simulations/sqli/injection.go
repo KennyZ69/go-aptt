@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	netUrl "net/url"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -15,29 +14,127 @@ var (
 	commonEndpoints = []string{"login", "signin", "signup", "sign", "home", "user", "admin", "search", "product"}
 )
 
+// func SqlIn(url string) error {
+// 	var wg sync.WaitGroup
+// 	seen := &sync.Map{}         // map to keep track of visited endpoints so I dont scan them twice
+// 	paths := make(chan string)  // channel where found links will be stored using crawling
+// 	inputs := make(chan string) // channel where found inputs will be stored using crawling
+//
+// 	wg.Add(1)
+//
+// 	fmt.Println("Starting CrawlForLinks function:")
+// 	go func() {
+// 		defer wg.Done()
+// 		CrawlForLinks(url, &wg, paths, seen) // crawling to find and store the found links (endpoints) on the app
+// 	}()
+//
+// 	wg.Add(1)
+// 	go func() {
+// 		defer wg.Done()
+// 		bruteForcePaths(url, paths) // trying to find whether some usually used endpoints exists on there by bruteforcing
+// 	}()
+//
+// 	wg.Add(1)
+// 	go func() {
+// 		// for path := range paths {
+// 		for _, path := range <-paths {
+// 			// fmt.Println("Found and processed link: ", path)
+// 			fmt.Println("Found and processed link: ", strconv.QuoteRune(path))
+// 			wg.Add(1)
+// 			go func(p string) {
+// 				defer wg.Done()
+// 				pathString := strconv.QuoteRune(path)
+// 				// CrawlForInputs(path, inputs, &wg)
+// 				CrawlForInputs(pathString, inputs, &wg)
+// 				// }(path)
+// 			}(strconv.QuoteRune(path))
+// 		}
+// 	}()
+//
+// 	go func() {
+// 		wg.Wait()
+// 		close(paths)
+// 		close(inputs)
+// 	}()
+//
+// 	for input := range inputs {
+// 		fmt.Println("Found input field: ", input)
+// 	}
+//
+// 	fmt.Println("Just completed crawling")
+//
+// 	return nil
+// }
+
 func SqlIn(url string) error {
+
+	links := GetLinks(url)
+	fmt.Println("Collected links: ", links)
+
+	links = append(links, url) // appending also the base url because I need to find inputs also on that path
+
+	inputs := GetInputs(links)
+	fmt.Println("Collected inputs: ", inputs)
+
+	return nil
+}
+
+func GetLinks(url string) []string {
 	var wg sync.WaitGroup
-	seen := &sync.Map{}         // map to keep track of visited endpoints so I dont scan them twice
-	paths := make(chan string)  // channel where found links will be stored using crawling
-	inputs := make(chan string) // channel where found inputs will be stored using crawling
+	links := make(chan string)
+	seen := &sync.Map{}
+	collectedLinks := []string{}
 
 	wg.Add(1)
+	fmt.Println("Starting to collect the found links:")
+	go func() {
+		defer wg.Done()
+		CrawlForLinks(url, &wg, links, seen)
+	}()
 
-	fmt.Println("Starting CrawlForLinks function:")
-	go CrawlForLinks(url, &wg, paths, seen) // crawling to find and store the found links (endpoints) on the app
-
-	go bruteForcePaths(url, paths) // trying to find whether some usually used endpoints exists on there by bruteforcing
+	wg.Add(1)
+	fmt.Println("BruteForce testing possible usually used paths:")
+	go func() {
+		defer wg.Done()
+		bruteForcePaths(url, links)
+	}()
 
 	go func() {
 		wg.Wait()
-		close(paths)
+		close(links)
 	}()
 
-	for _, path := range <-paths {
-		fmt.Println("Found and processed link: ", path)
+	fmt.Println("Collecting...")
+	for link := range links {
+		collectedLinks = append(collectedLinks, link)
+	}
+
+	return collectedLinks
+}
+
+func GetInputs(links []string) map[string][]string {
+	var wg sync.WaitGroup
+	inputs := make(chan struct {
+		Link  string
+		Input string
+	})
+
+	inputsMap := make(map[string][]string) // map to hold the inputs fields for each link
+
+	fmt.Println("Starting collecting inputs on found links:")
+	for _, link := range links {
 		wg.Add(1)
-		pathString := strconv.QuoteRune(path)
-		go CrawlForInputs(pathString, inputs, &wg)
+		go func() {
+			defer wg.Done()
+			inputsFields := CrawlForInputs(link)
+
+			for _, input := range inputsFields {
+				inputs <- struct {
+					Link  string
+					Input string
+				}{link, input}
+			}
+		}()
 	}
 
 	go func() {
@@ -45,23 +142,13 @@ func SqlIn(url string) error {
 		close(inputs)
 	}()
 
-	for _, input := range <-inputs {
-		fmt.Println("Found input field: ", strconv.QuoteRune(input))
+	fmt.Println("Collecting...")
+	for item := range inputs {
+		inputsMap[item.Link] = append(inputsMap[item.Link], item.Input)
 	}
 
-	fmt.Println("Just completed crawling")
-
-	return nil
+	return inputsMap
 }
-
-// func generateReport() string {}
-
-// func getPaths(url string, wg *sync.WaitGroup) []string {
-// 	var paths []string
-// 	paths = append(paths, bruteForcePaths(url)...)
-// 	paths = append(paths, CrawlForLinks(url, wg)...)
-// 	return paths
-// }
 
 // using this func to find the common endpoint whether they exist on given app so they can also be tested
 func bruteForcePaths(url string, links chan<- string) {
@@ -147,14 +234,17 @@ func CrawlForLinks(url string, wg *sync.WaitGroup, links chan<- string, seen *sy
 }
 
 // returns a list of input names for each endpoint
-func CrawlForInputs(url string, inputs chan<- string, wg *sync.WaitGroup) {
+// func CrawlForInputs(url string, inputs chan<- string, wg *sync.WaitGroup) {
+func CrawlForInputs(url string) []string {
 
-	defer wg.Done()
+	// defer wg.Done()
+	var inputs []string
 
 	resp, err := http.Get(url)
 	if err != nil {
 		fmt.Printf("Error Getting the url: %s: %v\n", url, err)
-		return
+		// return
+		return inputs
 	}
 	defer resp.Body.Close()
 
@@ -165,22 +255,26 @@ func CrawlForInputs(url string, inputs chan<- string, wg *sync.WaitGroup) {
 		switch {
 		case tt == html.TokenType(html.ErrorNode):
 			fmt.Printf("ErrorNode found on the path: %s\n", url)
-			return
+			// return
+			return inputs
 		case tt == html.ErrorToken:
 			fmt.Printf("Either got an error while going through the path or found the end: %s\n", url)
-			return
+			// return
+			return inputs
 		case tt == html.StartTagToken:
 			token := tokenizer.Token()
 			if token.Data == "input" || token.Data == "textarea" {
 				for _, attr := range token.Attr {
 					if attr.Key == "name" {
 						fmt.Println("Getting the input of: ", attr.Val)
-						inputs <- attr.Val
+						// inputs <- attr.Val
+						inputs = append(inputs, attr.Val)
 					}
 				}
 			}
 		}
 
 	}
-	return
+	// return
+	return inputs
 }
