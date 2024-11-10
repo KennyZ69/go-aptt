@@ -230,6 +230,7 @@ func main() {
 			case false:
 				// codebase := arg1
 				log.Println("Starting simulating sql injection in a docker enviroment")
+				os.Exit(0)
 			}
 
 			// here I should now try to somehow discover the possible input endpoints for the running app on provided url

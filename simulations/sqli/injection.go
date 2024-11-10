@@ -2,11 +2,15 @@ package sqli
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	netUrl "net/url"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/KennyZ69/go-aptt/types"
 	"golang.org/x/net/html"
 )
 
@@ -14,69 +18,117 @@ var (
 	commonEndpoints = []string{"login", "signin", "signup", "sign", "home", "user", "admin", "search", "product"}
 )
 
-// func SqlIn(url string) error {
-// 	var wg sync.WaitGroup
-// 	seen := &sync.Map{}         // map to keep track of visited endpoints so I dont scan them twice
-// 	paths := make(chan string)  // channel where found links will be stored using crawling
-// 	inputs := make(chan string) // channel where found inputs will be stored using crawling
-//
-// 	wg.Add(1)
-//
-// 	fmt.Println("Starting CrawlForLinks function:")
-// 	go func() {
-// 		defer wg.Done()
-// 		CrawlForLinks(url, &wg, paths, seen) // crawling to find and store the found links (endpoints) on the app
-// 	}()
-//
-// 	wg.Add(1)
-// 	go func() {
-// 		defer wg.Done()
-// 		bruteForcePaths(url, paths) // trying to find whether some usually used endpoints exists on there by bruteforcing
-// 	}()
-//
-// 	wg.Add(1)
-// 	go func() {
-// 		// for path := range paths {
-// 		for _, path := range <-paths {
-// 			// fmt.Println("Found and processed link: ", path)
-// 			fmt.Println("Found and processed link: ", strconv.QuoteRune(path))
-// 			wg.Add(1)
-// 			go func(p string) {
-// 				defer wg.Done()
-// 				pathString := strconv.QuoteRune(path)
-// 				// CrawlForInputs(path, inputs, &wg)
-// 				CrawlForInputs(pathString, inputs, &wg)
-// 				// }(path)
-// 			}(strconv.QuoteRune(path))
-// 		}
-// 	}()
-//
-// 	go func() {
-// 		wg.Wait()
-// 		close(paths)
-// 		close(inputs)
-// 	}()
-//
-// 	for input := range inputs {
-// 		fmt.Println("Found input field: ", input)
-// 	}
-//
-// 	fmt.Println("Just completed crawling")
-//
-// 	return nil
-// }
-
 func SqlIn(url string) error {
+	var wg sync.WaitGroup
 
+	// wg.Add(1)
+	// go func() {
 	links := GetLinks(url)
-	fmt.Println("Collected links: ", links)
+	// fmt.Println("Collected links: ", links)
 
 	links = append(links, url) // appending also the base url because I need to find inputs also on that path
 
 	inputs := GetInputs(links)
-	fmt.Println("Collected inputs: ", inputs)
+	// fmt.Println("Collected inputs: ", inputs)
+
+	// }()
+
+	var reports []types.SqliReport
+	var payloads = types.AllSqlPayloads
+	var reportChan = make(chan types.SqliReport)
+
+	// go routine to collect report into the reports slice
+	go func() {
+		for report := range reportChan {
+			reports = append(reports, report)
+		}
+	}()
+
+	for link, inputArr := range inputs {
+		wg.Add(1)
+		go func(l string, inArr []string) {
+			defer wg.Done()
+			log.Printf("Testing SQL Injection on link: %s\n", link)
+			// Run the sqli tests and which send report into the reports channel
+			RunSqliTests(l, inputArr, payloads, reportChan)
+		}(link, inputArr)
+	}
+
+	wg.Wait()
+	close(reportChan)
+	fmt.Println("Closing channel for reports...")
+
+	log.Println("Generating reports now...")
+	report := generateSqliReport(reports)
+	log.Println(report)
 
 	return nil
+}
+
+// func RunSqliTests(link string, inputs []string, payloads map[string][]string) (types.SqliReport, error) {
+func RunSqliTests(link string, inputs []string, payloads map[string][]string, reportChan chan<- types.SqliReport) {
+	var report types.SqliReport
+	var client = &http.Client{Timeout: 5 * time.Second}
+	for _, input := range inputs {
+		for category, payloadSet := range payloads {
+			for _, payload := range payloadSet {
+				start := time.Now()
+				inputField := netUrl.Values{}
+				inputField.Set(input, payload)
+
+				statusCode, success := SqliRequest(client, link, inputField)
+
+				report = types.SqliReport{
+					Endpoint:     link,
+					Success:      success,
+					StatusCode:   statusCode,
+					Payload:      payload,
+					PayloadCat:   category,
+					ResponseTime: time.Since(start),
+				}
+
+				reportChan <- report
+
+			}
+
+		}
+	}
+
+	// return report, nil
+}
+
+func SqliRequest(client *http.Client, link string, form netUrl.Values) (int, bool) {
+	req, err := http.NewRequest("POST", link, strings.NewReader(form.Encode()))
+	if err != nil {
+		log.Printf("Failed to create request to test on, on %s: %v\n", link, err)
+		return 0, false
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	log.Println("Running a request on: ", link)
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Request failed for link: %s: %v: %v\n", link, resp.StatusCode, err)
+		return resp.StatusCode, false
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("There was an error reading the body of the request: %v\n", err)
+		return resp.StatusCode, false
+	}
+	success := types.CheckForSqliIndicators(string(body), resp.StatusCode)
+
+	return resp.StatusCode, success
+}
+
+// TODO: finish this func to generate a proper report of the sql injection simulation
+func generateSqliReport(reports []types.SqliReport) string {
+	var report string
+
+	return report
 }
 
 func GetLinks(url string) []string {
@@ -124,17 +176,17 @@ func GetInputs(links []string) map[string][]string {
 	fmt.Println("Starting collecting inputs on found links:")
 	for _, link := range links {
 		wg.Add(1)
-		go func() {
+		go func(l string) {
 			defer wg.Done()
-			inputsFields := CrawlForInputs(link)
+			inputsFields := CrawlForInputs(l, &wg)
 
 			for _, input := range inputsFields {
 				inputs <- struct {
 					Link  string
 					Input string
-				}{link, input}
+				}{l, input}
 			}
-		}()
+		}(link)
 	}
 
 	go func() {
@@ -192,6 +244,7 @@ func CrawlForLinks(url string, wg *sync.WaitGroup, links chan<- string, seen *sy
 		fmt.Printf("Error in parsing the url: %v\n", err)
 	}
 	tokenizer := html.NewTokenizer(resp.Body)
+	wg.Add(1)
 	for {
 		// next token (node)
 		tt := tokenizer.Next()
@@ -230,14 +283,14 @@ func CrawlForLinks(url string, wg *sync.WaitGroup, links chan<- string, seen *sy
 			}
 		}
 	}
-	return
+	// return
 }
 
 // returns a list of input names for each endpoint
 // func CrawlForInputs(url string, inputs chan<- string, wg *sync.WaitGroup) {
-func CrawlForInputs(url string) []string {
+func CrawlForInputs(url string, wg *sync.WaitGroup) []string {
 
-	// defer wg.Done()
+	defer wg.Done()
 	var inputs []string
 
 	resp, err := http.Get(url)
@@ -247,9 +300,12 @@ func CrawlForInputs(url string) []string {
 		return inputs
 	}
 	defer resp.Body.Close()
-
 	tokenizer := html.NewTokenizer(resp.Body)
 
+	// body, err := io.ReadAll(resp.Body)
+	// fmt.Println(string(body))
+
+	wg.Add(1)
 	for {
 		tt := tokenizer.Next()
 		switch {
@@ -259,13 +315,21 @@ func CrawlForInputs(url string) []string {
 			return inputs
 		case tt == html.ErrorToken:
 			fmt.Printf("Either got an error while going through the path or found the end: %s\n", url)
+			if tokenizer.Err() == io.EOF {
+				return inputs
+			}
 			// return
-			return inputs
-		case tt == html.StartTagToken:
+			continue
+			// checking for start token or selfclosing tag so it looks also for things like <input/>
+		case tt == html.StartTagToken || tt == html.SelfClosingTagToken:
+			// case tt == html.SelfClosingTagToken:
 			token := tokenizer.Token()
+			fmt.Printf("Token: <%s>\n", token.Data)
 			if token.Data == "input" || token.Data == "textarea" {
+				fmt.Println("found input or textarea on: ", url)
 				for _, attr := range token.Attr {
-					if attr.Key == "name" {
+					fmt.Println("ranging through the attributes: ", attr.Key, attr.Val)
+					if attr.Key == "name" && attr.Val != "" {
 						fmt.Println("Getting the input of: ", attr.Val)
 						// inputs <- attr.Val
 						inputs = append(inputs, attr.Val)
@@ -276,5 +340,5 @@ func CrawlForInputs(url string) []string {
 
 	}
 	// return
-	return inputs
+	// return inputs
 }
