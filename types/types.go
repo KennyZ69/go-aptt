@@ -6,6 +6,8 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -283,4 +285,19 @@ func SqlPayloads() map[string][]string {
 	// arr = append(arr, SqlFunctionPayloads...)
 	// return arr
 	return result
+}
+
+func SaveReportToFile(report, filename string) {
+	file, err := os.Create(filename)
+	if err != nil {
+		log.Fatalf("Error creating the %s file: %v\n", filename, err)
+		return
+	}
+	defer file.Close()
+
+	_, err = fmt.Fprint(file, report)
+	if err != nil {
+		log.Fatalf("Error writing to the %s file using Fprintf: %v\n", filename, err)
+		return
+	}
 }

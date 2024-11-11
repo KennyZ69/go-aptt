@@ -3,14 +3,15 @@ package ddos
 import (
 	"bufio"
 	"fmt"
-	"github.com/schollz/progressbar/v3"
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/KennyZ69/go-aptt/types"
+	"github.com/schollz/progressbar/v3"
 )
 
 type RequestResult struct {
@@ -173,20 +174,5 @@ func generateReport(concurrency int, url string) {
 
 	log.Printf("DoS Attack Simulation ended on %s. You can find the saved report in the 'dos_sim_report.log'. \n", url)
 
-	saveReportToFile(report, "dos_sim_report.log")
-}
-
-func saveReportToFile(report, filename string) {
-	file, err := os.Create(filename)
-	if err != nil {
-		log.Fatalf("Error creating the %s file: %v\n", filename, err)
-		return
-	}
-	defer file.Close()
-
-	_, err = fmt.Fprint(file, report)
-	if err != nil {
-		log.Fatalf("Error writing to the %s file using Fprintf: %v\n", filename, err)
-		return
-	}
+	types.SaveReportToFile(report, "dos_sim_report.log")
 }

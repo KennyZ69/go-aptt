@@ -62,6 +62,9 @@ func SqlIn(url string) error {
 	report := generateSqliReport(reports)
 	log.Println(report)
 
+	log.Println("Saving the sqli report into a file: sqli_sim_report.log")
+	types.SaveReportToFile(report, "sqli_sim_report.log")
+
 	return nil
 }
 
@@ -126,9 +129,27 @@ func SqliRequest(client *http.Client, link string, form netUrl.Values) (int, boo
 
 // TODO: finish this func to generate a proper report of the sql injection simulation
 func generateSqliReport(reports []types.SqliReport) string {
-	var report string
+	var reportMessage string
+	log.Println("Starting to make reports for you...")
 
-	return report
+	for _, report := range reports {
+		add := fmt.Sprintf(`
+	========================================
+	Ran on %v
+	On the endpoint of %s
+	Used payload: %v
+	Category of the payload: %v
+	(Based on the category you can then run: --run sqli cat: to find out more)
+	Response time: %v
+	Response status: %v
+	Success of the injection: %v
+	========================================
+
+`, time.Now().Format(time.ANSIC), report.Endpoint, report.Payload, report.PayloadCat, report.ResponseTime, report.StatusCode, report.Success)
+		reportMessage += add
+	}
+
+	return reportMessage
 }
 
 func GetLinks(url string) []string {
