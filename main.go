@@ -92,7 +92,7 @@ func main() {
 		Run the DoS simulation against your running app if you dont worry about it crashing for 
 			**DISCLAIMER** : Do not run this on your production app if you are not sure whether it would do any harm
 	-> --run sqli [targer url]:
-	-> --run sqli [target codebase]: (ran in sandbox)
+	-> --run sqli [language] [target codebase] [* port]: (ran in sandbox)
 		Run the SQL Injection simulation against your app (finding the possible inputs), providing feedback
 			**DISCLAIMER** : Do not run this on your production app if you are not sure whether it would do any harm
 `)
@@ -166,31 +166,13 @@ func main() {
 				if len(args) == 6 {
 					port = args[5]
 				} else {
-					port = "8080"
+					port = "8002"
 				}
-				dockerfile := selectDockerFile(lang, target, port)
-				if dockerfile == "" {
+				url, err := RunDocker(lang, target, port)
+				if err != nil {
+					log.Fatalf("Error running the docker container function: %v\n", err)
 					os.Exit(1)
 				}
-				log.Println("Starting to build the Docker image for the enviroment from " + dockerfile)
-				cmd := exec.Command("docker", "build", "-f", dockerfile, "-t", "user-app", target)
-				err := cmd.Run()
-				if err != nil {
-					log.Println("There was an error when running the docker processes")
-					cleanupDocker()
-					// cleanupDocker(*pruneAllCmd)
-					log.Fatalf("Error building Docker image: %v\n", err)
-				}
-				log.Printf("Starting the Docker container on port 8080:%s\n", port)
-				// somehow I should probably get the port on which the users app runs
-				err = exec.Command("docker", "run", "-d", "-p", fmt.Sprintf("8080:%s", port), "--name", "user-app-container", "user-app").Run()
-				if err != nil {
-					log.Println("There was an error when running the docker processes")
-					cleanupDocker()
-					// cleanupDocker(*pruneAllCmd)
-					log.Fatalf("Error running the Docker image: %v\n", err)
-				}
-				url := "http://localhost:8080"
 				conc := strconv.Itoa(concurrency)
 				nReq := strconv.Itoa(numReq)
 				err = exec.Command("./go-aptt", "--run", "dos", url, nReq, conc).Run()
@@ -214,7 +196,6 @@ func main() {
 
 		case "sqli":
 			arg1 := args[1]
-			// switch strings.Contains(arg1, "http") {
 			switch strings.HasPrefix(arg1, "http") {
 			case true:
 				url := arg1
@@ -228,14 +209,35 @@ func main() {
 				os.Exit(0)
 
 			case false:
-				// codebase := arg1
 				log.Println("Starting simulating sql injection in a docker enviroment")
+				lang := arg1
+				target := args[2]
+				var port string
+				if len(args) == 4 {
+					port = args[3]
+				} else {
+					port = "8002"
+				}
+				url, err := RunDocker(lang, target, port)
+				if err != nil {
+					log.Fatalf("Error running the docker container function: %v\n", err)
+					os.Exit(1)
+				}
+				err = exec.Command("./go-aptt", "--run", "sqli", url).Run()
+				if err != nil {
+					cleanupDocker()
+					// cleanupDocker(*pruneAllCmd)
+					log.Fatalf("Error running './go-aptt --run sqli %s ' after building the docker enviroment: %v\n", url, err)
+					os.Exit(1)
+				}
+				log.Print(`
+
+	Sql injection simulation on your provided codebase has finished, you can look at your report in the 'reports' directory that was made.
+`)
+				cleanupDocker()
+				// cleanupDocker(*pruneAllCmd)
 				os.Exit(0)
 			}
-
-			// here I should now try to somehow discover the possible input endpoints for the running app on provided url
-			// TODO: could remake this into switch with cases, yeah that would be better for sure
-
 		}
 	}
 
@@ -260,6 +262,37 @@ func main() {
 	os.Exit(0)
 }
 
+// function to run the selected docker container for the user to use as a sandbox enviroment on the port 8002
+func RunDocker(language, target, port string) (string, error) {
+	dockerfile := selectDockerFile(language, target, port)
+	url := fmt.Sprintf("http://localhost:%s", port)
+	if dockerfile == "" {
+		return url, fmt.Errorf("There was a problem selecting a dockerfile, please inspect that you provided a viable language or so\n")
+	}
+
+	log.Println("Starting to build the Docker image for the enviroment from " + dockerfile)
+	cmd := exec.Command("docker", "build", "-f", dockerfile, "-t", "user-app", target)
+	err := cmd.Run()
+	if err != nil {
+		log.Println("There was an error when running the docker processes")
+		cleanupDocker()
+		// cleanupDocker(*pruneAllCmd)
+		return url, fmt.Errorf("Error building the docker image: %v\n", err)
+	}
+	log.Printf("Starting the Docker container on port 8080:%s\n", port)
+	err = exec.Command("docker", "run", "-d", "-p", fmt.Sprintf("8080:%s", port), "--name", "user-app-container", "user-app").Run()
+	if err != nil {
+		log.Println("There was an error when running the docker processes")
+		cleanupDocker()
+		// cleanupDocker(*pruneAllCmd)
+		return url, fmt.Errorf("Error running the docker image: %v\n", err)
+	}
+
+	log.Println("The docker image has been built successfully and is up and running")
+
+	return url, nil
+}
+
 func selectDockerFile(language, target, port string) string {
 	switch language {
 	case "node":
@@ -277,6 +310,7 @@ func selectDockerFile(language, target, port string) string {
 			fmt.Println("Created the dockerfiles dir")
 		}
 
+		target = strings.TrimSuffix(target, "/")
 		if _, err := os.Stat("dockerfiles/Dockerfile-go"); os.IsNotExist(err) {
 			version, err := getGoVersion(target + "/go.mod")
 			fmt.Println("Got the go version from go.mod file")
