@@ -109,7 +109,7 @@ func SqliRequest(client *http.Client, link string, form netUrl.Values) (int, boo
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	log.Println("Running a request on: ", link)
+	// log.Println("Running a request on: ", link)
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("Request failed for link: %s: %v: %v\n", link, resp.StatusCode, err)
@@ -130,25 +130,56 @@ func SqliRequest(client *http.Client, link string, form netUrl.Values) (int, boo
 // TODO: finish this func to generate a proper report of the sql injection simulation
 func generateSqliReport(reports []types.SqliReport) string {
 	var reportMessage string
+	var count = 0
+	var successCount = 0
+	var avgRespTime time.Duration
+	var fullTime time.Duration
 	log.Println("Starting to make reports for you...")
 
 	for _, report := range reports {
-		add := fmt.Sprintf(`
-	========================================
-	Ran on %v
-	On the endpoint of %s
-	Used payload: %v
-	Category of the payload: %v
-	(Based on the category you can then run: --run sqli cat: to find out more)
-	Response time: %v
+		count++
+		fullTime += report.ResponseTime
+		// 		add := fmt.Sprintf(`
+		// 	========================================
+		// 	Ran on %v
+		// 	On the endpoint of %s
+		// 	Used payload: %v
+		// 	Category of the payload: %v
+		// 	(Based on the category you can then run: --run sqli cat: to find out more)
+		// 	Response time: %v
+		// 	Response status: %v
+		// 	Success of the injection: %v
+		// 	========================================
+		//
+		// `, time.Now().Format(time.ANSIC), report.Endpoint, report.Payload, report.PayloadCat, report.ResponseTime, report.StatusCode, report.Success)
+		// reportMessage += add
+		if report.Success {
+			successCount++
+			add := fmt.Sprintf(`
+	=================================================
+	Sql injection was successful on the endpoint: %v
+	Category and used payload: %v : %v
 	Response status: %v
-	Success of the injection: %v
-	========================================
 
-`, time.Now().Format(time.ANSIC), report.Endpoint, report.Payload, report.PayloadCat, report.ResponseTime, report.StatusCode, report.Success)
-		reportMessage += add
+`, report.Endpoint, report.PayloadCat, report.Payload, report.StatusCode)
+			reportMessage += add
+
+		}
 	}
 
+	avgRespTime = fullTime / time.Duration(count)
+
+	add := fmt.Sprintf(`
+	=================================================
+	Average response time: %v
+	Number of successful sql injections: %v
+
+	%v of payloads were unsuccessful to break through to your app. Keep up the good work.
+	Ran on: %v
+
+`, avgRespTime, successCount, count-successCount, time.Now().Format(time.ANSIC))
+
+	reportMessage += add
 	return reportMessage
 }
 

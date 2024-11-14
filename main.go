@@ -5,10 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/KennyZ69/go-aptt/simulations/dbs"
 	"github.com/KennyZ69/go-aptt/simulations/ddos"
@@ -158,6 +160,8 @@ func main() {
 				ddos.DosAttack(url, numReq, concurrency, torControlPassword)
 				os.Exit(0)
 			} else {
+				log.Println("Cleaning the docker system from possible previous failed runs...")
+				cleanupDocker()
 				lang := args[1]
 				target := args[2]
 				numReq, _ := strconv.Atoi(args[3])
@@ -209,6 +213,9 @@ func main() {
 				os.Exit(0)
 
 			case false:
+				log.Println("Cleaning the docker system from possible previous failed runs...")
+				// maybe clean up the used docker container before running the sim so it ensures it wont fail the first and the person would not have to rerun it
+				cleanupDocker()
 				log.Println("Starting simulating sql injection in a docker enviroment")
 				lang := arg1
 				target := args[2]
@@ -223,13 +230,28 @@ func main() {
 					log.Fatalf("Error running the docker container function: %v\n", err)
 					os.Exit(1)
 				}
-				err = exec.Command("./go-aptt", "--run", "sqli", url).Run()
+
+				err = waitForContainerReady(url, 8, 2*time.Second)
 				if err != nil {
+					log.Fatalf("Error initializing the docker container, cannot ping it: %s: %v\n", url, err)
 					cleanupDocker()
-					// cleanupDocker(*pruneAllCmd)
-					log.Fatalf("Error running './go-aptt --run sqli %s ' after building the docker enviroment: %v\n", url, err)
 					os.Exit(1)
 				}
+
+				// err = exec.Command("./go-aptt", "--run", "sqli", url).Run()
+				cmd := exec.Command("./go-aptt", "--run", "sqli", url)
+				cmdOutput, err := cmd.CombinedOutput()
+				if err != nil {
+					cleanupDocker()
+					log.Fatalf("Error running './go-aptt --run sqli %s': %v\nOutput: %s\n", url, err, string(cmdOutput))
+					os.Exit(1)
+				}
+				// if err != nil {
+				// 	cleanupDocker()
+				// 	// cleanupDocker(*pruneAllCmd)
+				// 	log.Fatalf("Error running './go-aptt --run sqli %s ' after building the docker enviroment: %v\n", url, err)
+				// 	os.Exit(1)
+				// }
 				log.Print(`
 
 	Sql injection simulation on your provided codebase has finished, you can look at your report in the 'reports' directory that was made.
@@ -265,7 +287,8 @@ func main() {
 // function to run the selected docker container for the user to use as a sandbox enviroment on the port 8002
 func RunDocker(language, target, port string) (string, error) {
 	dockerfile := selectDockerFile(language, target, port)
-	url := fmt.Sprintf("http://localhost:%s", port)
+	// url := fmt.Sprintf("http://localhost:%s", port)
+	url := "http://localhost:8080"
 	if dockerfile == "" {
 		return url, fmt.Errorf("There was a problem selecting a dockerfile, please inspect that you provided a viable language or so\n")
 	}
@@ -414,4 +437,16 @@ func getGoVersion(target string) (string, error) {
 		return "", fmt.Errorf("Error: could not read the go.mod file correctly: %v", err)
 	}
 	return "", fmt.Errorf("No go version was found\n")
+}
+
+func waitForContainerReady(url string, maxRetries int, delay time.Duration) error {
+	for i := 0; i < maxRetries; i++ {
+		resp, err := http.Get(url)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			resp.Body.Close()
+			return nil // Endpoint is ready
+		}
+		time.Sleep(delay)
+	}
+	return fmt.Errorf("container not ready at %s after %d attempts", url, maxRetries)
 }
