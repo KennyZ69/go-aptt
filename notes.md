@@ -1,9 +1,9 @@
-<!-- TODO: Somehow make the reports nicer, not so long and the '--run sqli cat' to print out the description of used payload category -->
+<!-- TODO: Start / make a network and a port scanner to identify vulnerabilities etc etc... -->
+<!-- TODO: Remake the flag parsing and argument taking from the cli using the flag.string not just bools everywhere -->
 
 
-
-
-
+G-apt 
+    => this does not seem like a bad name for this 
 
 
 

@@ -15,6 +15,7 @@ import (
 	"github.com/KennyZ69/go-aptt/simulations/dbs"
 	"github.com/KennyZ69/go-aptt/simulations/ddos"
 	"github.com/KennyZ69/go-aptt/simulations/inter"
+	"github.com/KennyZ69/go-aptt/simulations/network"
 	"github.com/KennyZ69/go-aptt/simulations/sqli"
 	"github.com/KennyZ69/go-aptt/types"
 	"github.com/joho/godotenv"
@@ -69,8 +70,12 @@ func main() {
 	// target := args[0]
 
 	if *helpCommand {
-		fmt.Print(`
-	--network   [adress] : Scan the network on given adress in sandbox, based on provided mode (default = safe)
+		if args[0] == "network" {
+			fmt.Print(``)
+		} else {
+			fmt.Print(`
+	--network   [IP] : Scan the network on given adress in sandbox, based on provided mode (default = safe)
+	--network [range start IP] [range end IP]: Run a network and port scan on the given range of IP addresses
 	--db	    [type]   : Scan the database given you also add things like db-host, user, port etc..
 	--codebase  [target] : Scan the codebase from a given directory (or file)
 	--[command] --safe   : Run the security scans in safe mode so without attacking against provided base
@@ -80,6 +85,7 @@ func main() {
 	
 	If you have a .env file and are running tests in attack mode you should provided it using --env [path to your .env file]
 `)
+		}
 		os.Exit(0)
 	}
 
@@ -133,12 +139,55 @@ func main() {
 	}
 
 	if *networkTest {
-		if len(args) == 0 {
-			fmt.Println("Error: No target provided. Please specify the target (e.g., directory, database URL, network range).")
-			os.Exit(1)
+		log.Println("Setting up the network tests")
+		// flag.Parse()
+		// if len(args) == 0 {
+		// fmt.Println("Error: No target provided. Please specify the target (e.g., directory, database URL, network range).")
+		// os.Exit(1)
+		// }
+		// --network scan (-t) addr (addr_start addr_end)
+		if len(args) < 2 || len(args) > 3 {
+			fmt.Println("Error: wrong number of arguments passed, see: --help network")
+			os.Exit(0)
 		}
-		// run the network test
-		log.Println("Starting the network tests")
+
+		fun := args[0]
+
+		// lets make it so that I always have both start and end but the end maybe an empty string so check for that in the particular functions
+		// var addr_start, addr_end string
+		// addr_start = args[1]
+		// if len(args) == 3 {
+		// 	addr_end = args[2]
+		// } else {
+		// 	addr_end = ""
+		// }
+		// fmt.Printf("addr_start: %v; addr_end: %v; function: %v\n", addr_start, addr_end, fun)
+
+		// mam pici nejake inputy riesit tu v maine...
+		// I can pass the args to the network scan and in there it checks what form of input it is and based on that it will work with it
+
+		switch fun {
+		case "scan":
+			var ips []string
+			log.Println("Starting the network scan...")
+			addr_start, addr_end, isCidr, err := network.ParseInputs(args[1:])
+			if err != nil {
+				log.Fatalf("Error parsing the input values: %v\n", err)
+				os.Exit(1)
+			}
+
+			// log.Printf("Scanning from %v to %v ...\n", addr_start, addr_end)
+
+			// generate the ips to scan (maybe can be done in the scan function by itself)
+			if isCidr {
+				ips = network.GenerateFromCIDR(addr_start)
+			} else {
+				ips = network.GenerateIPs(addr_start, addr_end)
+			}
+			log.Println("Found the ips: ", ips)
+		}
+
+		os.Exit(0)
 	}
 
 	if *runCommand {
