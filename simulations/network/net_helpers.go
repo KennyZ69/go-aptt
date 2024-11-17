@@ -65,7 +65,6 @@ func GenerateIPs(startIP, endIP string) []string {
 	return ips
 }
 
-// helper function to increment
 func toInt(s string) int {
 	var n, err = strconv.Atoi(s)
 	if err != nil {
@@ -98,6 +97,7 @@ func GenerateFromCIDR(input string) []string {
 	return ips
 }
 
+// helper function to increment
 func inc(ip net.IP) {
 	for j := len(ip) - 1; j >= 0; j-- {
 		ip[j]++
