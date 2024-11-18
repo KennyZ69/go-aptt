@@ -1,6 +1,14 @@
 package network
 
-import "time"
+import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"log"
+	"net"
+	"os"
+	"time"
+)
 
 type ICMP struct {
 	Type     uint8 // Type 8 = echo req
@@ -11,7 +19,68 @@ type ICMP struct {
 }
 
 // implementing ICMP ping function myself, returs whether given host is active and the latency
-func ping(addr string, timeout time.Duration) (bool, time.Duration)
+func ping(addr string, timeout time.Duration) (bool, time.Duration, error) {
+	// create raw icmp socket
+	conn, err := net.Dial("ip4:icmp", addr)
+	if err != nil {
+		// log.Printf("Error connecting to %s for ping: %v\n", addr, err)
+		return false, 0, fmt.Errorf("Error connecting to %s for ping: %v\n", addr, err)
+	}
+	defer conn.Close()
+
+	icmpPacket := ICMP{
+		Type: 8,
+		Code: 0,
+		// checksum will be calculated later
+		// Checksum: 0,
+		Id: uint16(os.Getpid() & 0xffff),
+		// Id:     0x1234,
+		SeqNum: 1,
+	}
+
+	packet := new(bytes.Buffer)
+	// dont know whether it does matter what endian I use now or not, so will need to look into that more
+	binary.Write(packet, binary.BigEndian, icmpPacket)
+	payload := []byte("Incoming ping...")
+	packet.Write(payload)
+	icmpPacket.Checksum = getChecksum(packet.Bytes())
+
+	// actually I guess I don't know why this should be resetted
+	// maybe because I need to write it with the checksum also ??
+	packet.Reset()
+
+	binary.Write(packet, binary.BigEndian, icmpPacket)
+	packet.Write(payload)
+
+	// send the icmp
+	start := time.Now()
+	_, err = conn.Write(packet.Bytes())
+	if err != nil {
+		return false, 0, fmt.Errorf("Error sending icmp packet: %v\n", err)
+	}
+
+	// handle the reply
+	reply := make([]byte, 1024)
+	conn.SetReadDeadline(time.Now().Add(timeout))
+	n, err := conn.Read(reply)
+	if err != nil {
+		return false, 0, fmt.Errorf("Error handling the icmp reply: %v\n", err)
+	}
+
+	duration := time.Since(start)
+
+	if n < 28 { // 20 + 8 as the minimum length for ipv4 header + icmp header
+		return false, 0, fmt.Errorf("Error invalid ICMP reply lenght")
+	}
+
+	replyId := binary.BigEndian.Uint16(reply[24:26])
+	replySeq := binary.BigEndian.Uint16(reply[26:28])
+	if replyId != icmpPacket.Id || replySeq != icmpPacket.SeqNum {
+		return false, 0, fmt.Errorf("Error mismatched ICMP reply ID or Seq number")
+	}
+
+	return true, duration, nil
+}
 
 func getChecksum(data []byte) uint16 {
 	var sum uint32
