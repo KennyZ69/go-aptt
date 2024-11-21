@@ -70,10 +70,7 @@ func main() {
 	// target := args[0]
 
 	if *helpCommand {
-		if args[0] == "network" {
-			fmt.Print(``)
-		} else {
-			fmt.Print(`
+		fmt.Print(`
 	--network   [IP] : Scan the network on given adress in sandbox, based on provided mode (default = safe)
 	--network [range start IP] [range end IP]: Run a network and port scan on the given range of IP addresses
 	--db	    [type]   : Scan the database given you also add things like db-host, user, port etc..
@@ -85,7 +82,6 @@ func main() {
 	
 	If you have a .env file and are running tests in attack mode you should provided it using --env [path to your .env file]
 `)
-		}
 		os.Exit(0)
 	}
 
@@ -163,7 +159,6 @@ func main() {
 		// }
 		// fmt.Printf("addr_start: %v; addr_end: %v; function: %v\n", addr_start, addr_end, fun)
 
-		// mam pici nejake inputy riesit tu v maine...
 		// I can pass the args to the network scan and in there it checks what form of input it is and based on that it will work with it
 
 		switch fun {
@@ -185,6 +180,26 @@ func main() {
 				ips = network.GenerateIPs(addr_start, addr_end)
 			}
 			log.Println("Found the ips: ", ips)
+
+			log.Println("Trying to ping these IPs and get a list of active ones...")
+			var activeHosts []string
+			for _, ip := range ips {
+				fmt.Printf("Pinging %s\n", ip)
+				active, latency, err := network.Ping(ip, time.Second*2)
+				if err != nil {
+					log.Printf("Failed to ping %s: %v\n", ip, err)
+
+					fmt.Println("You may need to run this with sudo")
+					continue
+				}
+				if active {
+					log.Printf("Host %s is active with latency of %v\nAdding to the list of active hosts...\n", ip, latency)
+					activeHosts = append(activeHosts, ip)
+				} else {
+					log.Printf("%s is not active host\ncontinuing...\n", ip)
+					continue
+				}
+			}
 		}
 
 		os.Exit(0)

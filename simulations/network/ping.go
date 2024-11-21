@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"time"
@@ -19,7 +18,7 @@ type ICMP struct {
 }
 
 // implementing ICMP ping function myself, returs whether given host is active and the latency
-func ping(addr string, timeout time.Duration) (bool, time.Duration, error) {
+func Ping(addr string, timeout time.Duration) (bool, time.Duration, error) {
 	// create raw icmp socket
 	conn, err := net.Dial("ip4:icmp", addr)
 	if err != nil {
