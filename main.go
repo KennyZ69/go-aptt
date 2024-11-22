@@ -180,26 +180,12 @@ func main() {
 				ips = network.GenerateIPs(addr_start, addr_end)
 			}
 			log.Println("Found the ips: ", ips)
-
-			log.Println("Trying to ping these IPs and get a list of active ones...")
-			var activeHosts []string
-			for _, ip := range ips {
-				fmt.Printf("Pinging %s\n", ip)
-				active, latency, err := network.Ping(ip, time.Second*2)
-				if err != nil {
-					log.Printf("Failed to ping %s: %v\n", ip, err)
-
-					fmt.Println("You may need to run this with sudo")
-					continue
-				}
-				if active {
-					log.Printf("Host %s is active with latency of %v\nAdding to the list of active hosts...\n", ip, latency)
-					activeHosts = append(activeHosts, ip)
-				} else {
-					log.Printf("%s is not active host\ncontinuing...\n", ip)
-					continue
-				}
+			// just testing purposes
+			net_report, err := network.Network_scan(ips)
+			if err != nil {
+				fmt.Printf("Some error in the network scan: %v\n", err)
 			}
+			fmt.Println(net_report)
 		}
 
 		os.Exit(0)

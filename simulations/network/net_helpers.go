@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+type NetReport struct {
+	IP      string // or maybe netIp
+	MacAddr string // or later some other type
+	Report  string
+}
+
 // parse the user inputs to know what I am working with
 // looking for "/" (cidr notation) or hostnames/domains or then single ips or range or ips
 func ParseInputs(args []string) (string, string, bool, error) {
