@@ -12,9 +12,9 @@ func Network_scan(ips []string) (NetReport, error) {
 	var activeHosts = make(chan string, len(ips))
 	var wg sync.WaitGroup
 
-	// wg.Add(1)
+	wg.Add(1)
 	go func() {
-		// defer wg.Done()
+		defer wg.Done()
 		err := discoverHosts(ips, activeHosts, time.Second*2, &wg)
 		if err != nil {
 			log.Printf("There was an error discovering the active hosts: %v\n", err)
@@ -25,11 +25,22 @@ func Network_scan(ips []string) (NetReport, error) {
 	// close(activeHosts)
 
 	var activeCounter int
+	var hostsArr []string
+	var stats = make(chan IpStats, len(activeHosts))
 
 	for host := range activeHosts {
 		fmt.Printf("Discovered active host: %v\n", host)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			stats <- MeasurePings(host, 5)
+		}()
+		hostsArr = append(hostsArr, host)
 		activeCounter++
 	}
+	// TODO: for each active host found I can do the arp requests to find its mac address
+
+	wg.Wait()
 
 	log.Printf("Number of active hosts: %d\n", activeCounter)
 
@@ -40,7 +51,7 @@ func Network_scan(ips []string) (NetReport, error) {
 func discoverHosts(ips []string, activeHosts chan<- string, timeout time.Duration, wg *sync.WaitGroup) error {
 	var notActiveCounter, failedCounter int
 
-	defer wg.Done()
+	// defer wg.Done()
 
 	log.Println("Trying to ping the found IPs and get a list of active ones...")
 
@@ -70,10 +81,10 @@ func discoverHosts(ips []string, activeHosts chan<- string, timeout time.Duratio
 
 	}
 
-	// Close channel after all pings are done
 	go func() {
-		fmt.Println("Closing channel for getting active hosts")
 		wg.Wait() // Ensure all goroutines finish
+		fmt.Println("Closing channel for getting active hosts")
+		// Close channel after all pings are done
 		close(activeHosts)
 	}()
 

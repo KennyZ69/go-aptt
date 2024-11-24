@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"time"
@@ -97,4 +98,52 @@ func getChecksum(data []byte) uint16 {
 
 	// one's complement -> inverts all bits so 0 to 1 and 1 to 0
 	return uint16(^sum)
+}
+
+func MeasurePings(host string, count int) IpStats {
+	var totalLatency, minLatency, maxLatency time.Duration
+	var sent, received int
+
+	for i := 0; i < count; i++ {
+		replied, latency, err := Ping(host, time.Second*2)
+		sent++
+		if err != nil {
+			log.Printf("Error occured when measuring the stats: %s: %v\n", host, err)
+			return IpStats{
+				Ip:    host,
+				Error: err,
+			}
+		}
+
+		if replied {
+			received++
+			totalLatency += latency
+			if minLatency == 0 || latency < minLatency {
+				minLatency = latency
+			}
+			if latency > maxLatency {
+				maxLatency = latency
+			}
+		}
+
+	}
+
+	packetLoss := float64(sent-received) / float64(sent) * 100
+	fmt.Printf("Ping results for %s:\n", host)
+	fmt.Printf("    Packets Sent: %d, Received: %d, Lost: %d (%.2f%% loss)\n",
+		sent, received, sent-received, packetLoss)
+
+	if received > 0 {
+		fmt.Printf("    Latency (ms): Min = %v, Max = %v, Avg = %v\n",
+			minLatency,
+			maxLatency,
+			(totalLatency / time.Duration(received)),
+		)
+	}
+	return IpStats{
+		Ip:         host,
+		Error:      nil,
+		Latency:    totalLatency / time.Duration(received),
+		PacketLoss: packetLoss,
+	}
 }

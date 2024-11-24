@@ -6,7 +6,15 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 )
+
+type IpStats struct {
+	Ip         string
+	Latency    time.Duration
+	PacketLoss float64
+	Error      error
+}
 
 type NetReport struct {
 	IP      string // or maybe netIp

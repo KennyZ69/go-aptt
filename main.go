@@ -171,8 +171,6 @@ func main() {
 				os.Exit(1)
 			}
 
-			// log.Printf("Scanning from %v to %v ...\n", addr_start, addr_end)
-
 			// generate the ips to scan (maybe can be done in the scan function by itself)
 			if isCidr {
 				ips = network.GenerateFromCIDR(addr_start)
