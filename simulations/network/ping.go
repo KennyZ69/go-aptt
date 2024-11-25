@@ -19,12 +19,12 @@ type ICMP struct {
 }
 
 // implementing ICMP ping function myself, returs whether given host is active and the latency
-func (addr *Addr) Ping(timeout time.Duration) (bool, time.Duration, error) {
+func (addr *Host) Ping(timeout time.Duration) (bool, time.Duration, error) {
 	// create raw icmp socket
-	conn, err := net.Dial("ip4:icmp", addr.Ip)
+	conn, err := net.Dial("ip4:icmp", addr.TargetIp)
 	if err != nil {
 		// log.Printf("Error connecting to %s for ping: %v\n", addr, err)
-		return false, 0, fmt.Errorf("Error connecting to %s for ping: %v\n", addr.Ip, err)
+		return false, 0, fmt.Errorf("Error connecting to %s for ping: %v\n", addr.TargetIp, err)
 	}
 	defer conn.Close()
 
@@ -103,7 +103,7 @@ func (icmp *ICMP) checksum(data []byte) {
 	// return uint16(^sum)
 }
 
-func (host *Addr) MeasurePings(count int) IpStats {
+func (host *Host) MeasurePings(count int) IpStats {
 	var totalLatency, minLatency, maxLatency time.Duration
 	var sent, received int
 
@@ -114,7 +114,7 @@ func (host *Addr) MeasurePings(count int) IpStats {
 		if err != nil {
 			log.Printf("Error occured when measuring the stats: %s: %v\n", host, err)
 			return IpStats{
-				Ip:    host.Ip,
+				Ip:    host.TargetIp,
 				Error: err,
 			}
 		}
@@ -133,7 +133,7 @@ func (host *Addr) MeasurePings(count int) IpStats {
 	}
 
 	packetLoss := float64(sent-received) / float64(sent) * 100
-	fmt.Printf("Ping results for %s:\n", host.Ip)
+	fmt.Printf("Ping results for %s:\n", host.TargetIp)
 	fmt.Printf("    Packets Sent: %d, Received: %d, Lost: %d (%.2f%% loss)\n",
 		sent, received, sent-received, packetLoss)
 
@@ -145,7 +145,7 @@ func (host *Addr) MeasurePings(count int) IpStats {
 		)
 	}
 	return IpStats{
-		Ip:         host.Ip,
+		Ip:         host.TargetIp,
 		Error:      nil,
 		Latency:    totalLatency / time.Duration(received),
 		PacketLoss: packetLoss,

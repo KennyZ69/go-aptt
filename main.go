@@ -22,6 +22,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// The flags to use to specify which part of the tool the client is going to use whether it be network scanner or codebase scanner or what...
 var (
 	pruneAllCmd  = flag.Bool("prune-all", false, "Add to prune all docker images and volumes after running your tests")
 	helpCommand  = flag.Bool("help", false, "Usage: ")
@@ -30,6 +31,13 @@ var (
 	networkTest  = flag.Bool("network", false, "Run Security Scan on network with given address")
 	dbTest       = flag.Bool("db", false, "Run Security Scan on database with given host, user, port and type")
 	runCommand   = flag.Bool("run", false, "Specify what exact simulation test you want to run")
+)
+
+// flags for specific scan / parts of the tool e.g. the network scanner
+var (
+	//TODO: ->
+	// set a network interface for arp traffic (eth0 or ...have to find out)
+	ifaceFlag = flag.String("i", "eth0", "Network interface to use for ARP traffic")
 )
 
 func main() {

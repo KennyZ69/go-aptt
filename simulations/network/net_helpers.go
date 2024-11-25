@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -22,15 +23,39 @@ type NetReport struct {
 	Report  string
 }
 
-type Addr struct {
-	Ip  string
-	Mac string
+type Host struct {
+	TargetIp    string
+	TargetMac   string
+	HardwareMac net.HardwareAddr
+	// Ip          net.IP
+	Ip netip.Addr
+	// SenderMacStr string
+	// SenderIpStr  string
 }
 
-func (nr *NetReport) WriteReport() {}
-func (addr *Addr) DiscoverMac()    {}
+type ArpPacket struct {
+	HardwareType       uint16
+	ProtocolType       uint16
+	HardwareAddrLength uint8
+	IpLength           uint8
+	Operation          Operation
+	SenderHardwareAddr net.HardwareAddr
+	SenderIp           netip.Addr
+	TargetHardwareAddr net.HardwareAddr
+	TargetIp           netip.Addr
+}
 
-// func (addr *Addr) Ping(timeout time.Duration) (bool, time.Duration, error)
+// just to specify the operation as either reply or request
+type Operation uint16
+
+const (
+	OperationRequest Operation = 1
+	OperationReply   Operation = 2
+)
+
+func (nr *NetReport) WriteReport() {}
+
+// func (addr *Host) Ping(timeout time.Duration) (bool, time.Duration, error)
 
 // parse the user inputs to know what I am working with
 // looking for "/" (cidr notation) or hostnames/domains or then single ips or range or ips
@@ -129,4 +154,59 @@ func inc(ip net.IP) {
 			break
 		}
 	}
+}
+
+// discover the sender ip and sender mac address
+func (host *Host) getDetails() error {
+	iface, err := getCurrentNetwork()
+	if err != nil {
+		return err
+	}
+
+	host.Ip, err = getIpAddr(iface)
+	if err != nil {
+		return err
+	}
+
+	host.HardwareMac = iface.HardwareAddr
+	return nil
+}
+
+func getCurrentNetwork() (*net.Interface, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("Error getting network interfaces: %v\n", err)
+	}
+
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp != 0 && iface.Flags&net.FlagLoopback == 0 && iface.HardwareAddr != nil {
+			return &iface, nil
+		}
+	}
+	return nil, fmt.Errorf("Could not find the current network interface\n")
+}
+
+// func getIpAddr(iface *net.Interface) (net.IP, error) {
+func getIpAddr(iface *net.Interface) (netip.Addr, error) {
+	addrs, err := iface.Addrs()
+	if err != nil {
+		// return nil, fmt.Errorf("Error getting the ip address from found net interface: %v\n", err)
+		return netip.Addr{}, fmt.Errorf("Error getting the ip address from found net interface: %v\n", err)
+	}
+
+	for _, addr := range addrs {
+		ipNet, ok := addr.(*net.IPNet)
+		if ok && !ipNet.IP.IsLoopback() {
+			// if ipNet.IP.To4() != nil {
+			// return ipNet.IP, nil
+			// }
+			ipAddr, ok := netip.AddrFromSlice(ipNet.IP.To4())
+			if ok {
+				return ipAddr, nil
+			}
+		}
+	}
+
+	// return nil, fmt.Errorf("Could not find corresponding ip address\n")
+	return netip.Addr{}, fmt.Errorf("Could not find corresponding ip address\n")
 }
