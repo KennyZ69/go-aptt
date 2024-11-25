@@ -19,12 +19,12 @@ type ICMP struct {
 }
 
 // implementing ICMP ping function myself, returs whether given host is active and the latency
-func Ping(addr string, timeout time.Duration) (bool, time.Duration, error) {
+func (addr *Addr) Ping(timeout time.Duration) (bool, time.Duration, error) {
 	// create raw icmp socket
-	conn, err := net.Dial("ip4:icmp", addr)
+	conn, err := net.Dial("ip4:icmp", addr.Ip)
 	if err != nil {
 		// log.Printf("Error connecting to %s for ping: %v\n", addr, err)
-		return false, 0, fmt.Errorf("Error connecting to %s for ping: %v\n", addr, err)
+		return false, 0, fmt.Errorf("Error connecting to %s for ping: %v\n", addr.Ip, err)
 	}
 	defer conn.Close()
 
@@ -43,7 +43,9 @@ func Ping(addr string, timeout time.Duration) (bool, time.Duration, error) {
 	binary.Write(packet, binary.BigEndian, icmpPacket)
 	payload := []byte("Incoming ping...")
 	packet.Write(payload)
-	icmpPacket.Checksum = getChecksum(packet.Bytes())
+	// icmpPacket.Checksum = getChecksum(packet.Bytes())
+	// set the checksum of the packet
+	icmpPacket.checksum(packet.Bytes())
 
 	// actually I guess I don't know why this should be resetted
 	// maybe because I need to write it with the checksum also ??
@@ -82,7 +84,7 @@ func Ping(addr string, timeout time.Duration) (bool, time.Duration, error) {
 	return true, duration, nil
 }
 
-func getChecksum(data []byte) uint16 {
+func (icmp *ICMP) checksum(data []byte) {
 	var sum uint32
 
 	// converting, shifting the bits and the "|" is a bitwise OR to combine those two 8-bit values into one 16 bit val
@@ -97,20 +99,22 @@ func getChecksum(data []byte) uint16 {
 	sum += (sum >> 16)
 
 	// one's complement -> inverts all bits so 0 to 1 and 1 to 0
-	return uint16(^sum)
+	icmp.Checksum = uint16(^sum)
+	// return uint16(^sum)
 }
 
-func MeasurePings(host string, count int) IpStats {
+func (host *Addr) MeasurePings(count int) IpStats {
 	var totalLatency, minLatency, maxLatency time.Duration
 	var sent, received int
 
 	for i := 0; i < count; i++ {
-		replied, latency, err := Ping(host, time.Second*2)
+		// replied, latency, err := Ping(host, time.Second*2)
+		replied, latency, err := host.Ping(time.Second * 2)
 		sent++
 		if err != nil {
 			log.Printf("Error occured when measuring the stats: %s: %v\n", host, err)
 			return IpStats{
-				Ip:    host,
+				Ip:    host.Ip,
 				Error: err,
 			}
 		}
@@ -129,7 +133,7 @@ func MeasurePings(host string, count int) IpStats {
 	}
 
 	packetLoss := float64(sent-received) / float64(sent) * 100
-	fmt.Printf("Ping results for %s:\n", host)
+	fmt.Printf("Ping results for %s:\n", host.Ip)
 	fmt.Printf("    Packets Sent: %d, Received: %d, Lost: %d (%.2f%% loss)\n",
 		sent, received, sent-received, packetLoss)
 
@@ -141,7 +145,7 @@ func MeasurePings(host string, count int) IpStats {
 		)
 	}
 	return IpStats{
-		Ip:         host,
+		Ip:         host.Ip,
 		Error:      nil,
 		Latency:    totalLatency / time.Duration(received),
 		PacketLoss: packetLoss,

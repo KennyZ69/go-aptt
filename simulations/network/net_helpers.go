@@ -22,6 +22,16 @@ type NetReport struct {
 	Report  string
 }
 
+type Addr struct {
+	Ip  string
+	Mac string
+}
+
+func (nr *NetReport) WriteReport() {}
+func (addr *Addr) DiscoverMac()    {}
+
+// func (addr *Addr) Ping(timeout time.Duration) (bool, time.Duration, error)
+
 // parse the user inputs to know what I am working with
 // looking for "/" (cidr notation) or hostnames/domains or then single ips or range or ips
 func ParseInputs(args []string) (string, string, bool, error) {

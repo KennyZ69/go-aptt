@@ -29,20 +29,24 @@ func Network_scan(ips []string) (NetReport, error) {
 	var stats = make(chan IpStats, len(activeHosts))
 
 	for host := range activeHosts {
+		addr := Addr{
+			Ip: host,
+		}
 		fmt.Printf("Discovered active host: %v\n", host)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			stats <- MeasurePings(host, 5)
+			stats <- addr.MeasurePings(20)
 		}()
 		hostsArr = append(hostsArr, host)
 		activeCounter++
 	}
-	// TODO: for each active host found I can do the arp requests to find its mac address
 
 	wg.Wait()
 
 	log.Printf("Number of active hosts: %d\n", activeCounter)
+
+	//TODO: for each active host found I can do the arp requests to find its mac address
 
 	return report, nil
 }
@@ -56,28 +60,31 @@ func discoverHosts(ips []string, activeHosts chan<- string, timeout time.Duratio
 	log.Println("Trying to ping the found IPs and get a list of active ones...")
 
 	for _, ip := range ips {
+		addr := Addr{
+			Ip: ip,
+		}
 
 		wg.Add(1)
-		go func(ip string) {
+		go func(ipAddr Addr) {
 			defer func() {
-				log.Printf("Finished pings on %s\n", ip)
+				log.Printf("Finished pings on %s\n", addr.Ip)
 				wg.Done()
 			}()
-			fmt.Printf("Pinging %s\n", ip)
-			active, latency, err := Ping(ip, timeout)
+			fmt.Printf("Pinging %s\n", addr.Ip)
+			active, latency, err := addr.Ping(timeout)
 			if err != nil {
-				log.Printf("Failed to ping %s: %v\n", ip, err)
+				log.Printf("Failed to ping %s: %v\n", addr.Ip, err)
 				// fmt.Println("You may need to run this with sudo")
 				failedCounter++
 			}
 			if active {
-				log.Printf("Host %s is active with latency of %v\nAdding to the list of active hosts...\n", ip, latency)
-				activeHosts <- ip
+				log.Printf("Host %s is active with latency of %v\nAdding to the list of active hosts...\n", addr.Ip, latency)
+				activeHosts <- addr.Ip
 			} else {
-				log.Printf("%s is not active host\ncontinuing...\n", ip)
+				log.Printf("%s is not active host\ncontinuing...\n", addr.Ip)
 				notActiveCounter++
 			}
-		}(ip)
+		}(addr)
 
 	}
 
