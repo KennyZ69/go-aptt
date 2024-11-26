@@ -6,7 +6,7 @@ import (
 	"net/netip"
 )
 
-type Client struct {
+type Connection struct {
 	netInf     *net.Interface
 	ip         netip.Addr
 	packetConn net.PacketConn
@@ -14,7 +14,7 @@ type Client struct {
 
 const ARP_PROTOCOL = 0x0806
 
-// Allocate a byte slice from the data of an ARP Packet
+// Allocate a byte slice from the data of an ARP Packet returning packet binary
 func (p *ArpPacket) Marshal() ([]byte, error) {
 
 	// 2 bytes for both ProtocolType and HardwareType
@@ -34,6 +34,25 @@ func (p *ArpPacket) Marshal() ([]byte, error) {
 	hLen := int(p.HardwareAddrLength)
 	ipLen := int(p.IpLength)
 
-	copy()
+	copy(bin[nb:nb+hLen], p.SenderHardwareAddr)
+	nb += hLen
+
+	senderIpv4 := p.SenderIp.As4()
+	copy(bin[nb:nb+ipLen], senderIpv4[:])
+	nb += ipLen
+	// TODO: finish this function
+
+	copy(bin[nb:nb+hLen], p.TargetHardwareAddr)
+	nb += hLen
+
+	targetIpv4 := p.TargetIp.As4()
+	copy(bin[nb:nb+ipLen], targetIpv4[:])
+
+	return bin, nil
+}
+
+// Unmarshal raw byte slice (packet binary) into an ARP Packet
+func (p *ArpPacket) Unmarshal([]byte) error {
+	// check for room
 
 }

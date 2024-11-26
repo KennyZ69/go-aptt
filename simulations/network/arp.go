@@ -19,7 +19,7 @@ var (
 // var buf bytes.Buffer
 // }
 
-func (host *Host) ArpRequest(ip netip.Addr) error {
+func (host *Host) ArpRequest(ip netip.Addr, client Connection) error {
 	err := host.getDetails()
 	if err != nil {
 		return err
@@ -28,6 +28,14 @@ func (host *Host) ArpRequest(ip netip.Addr) error {
 	if err != nil {
 		// handle error when creating arp requests
 	}
+
+	//
+	client.packetConn, err = net.ListenPacket("ethernet", client.netInf.Name)
+	if err != nil {
+		return fmt.Errorf("Error opening ethernet raw socket: %v\n", err)
+	}
+
+	defer client.packetConn.Close()
 
 	return nil
 }
