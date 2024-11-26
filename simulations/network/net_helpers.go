@@ -34,11 +34,11 @@ type Host struct {
 }
 
 type ArpPacket struct {
-	HardwareType       uint16
-	ProtocolType       uint16
-	HardwareAddrLength uint8
-	IpLength           uint8
-	Operation          Operation
+	HardwareType       uint16    // 2 bytes
+	ProtocolType       uint16    // 2 bytes
+	HardwareAddrLength uint8     // 1 byte
+	IpLength           uint8     // 1 byte
+	Operation          Operation // 2 bytes
 	SenderHardwareAddr net.HardwareAddr
 	SenderIp           netip.Addr
 	TargetHardwareAddr net.HardwareAddr
@@ -156,7 +156,7 @@ func inc(ip net.IP) {
 	}
 }
 
-// discover the sender ip and sender mac address
+// Discover the sender ip and sender mac address and set them to the host
 func (host *Host) getDetails() error {
 	iface, err := getCurrentNetwork()
 	if err != nil {
