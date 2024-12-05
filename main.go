@@ -24,8 +24,8 @@ import (
 
 // The flags to use to specify which part of the tool the client is going to use whether it be network scanner or codebase scanner or what...
 var (
-	pruneAllCmd  = flag.Bool("prune-all", false, "Add to prune all docker images and volumes after running your tests")
-	helpCommand  = flag.Bool("help", false, "Usage: ")
+	pruneAllCmd  = flag.Bool("prune", false, "Add to prune all docker images and volumes after running your tests")
+	helpCommand  = flag.Bool("h", false, "Usage: ")
 	simsCommand  = flag.Bool("sims", false, "Specific simulation tests: ")
 	codebaseTest = flag.Bool("codebase", false, "Run Security Scan on provided codebase (given file or directory)")
 	networkTest  = flag.Bool("network", false, "Run Security Scan on network with given address")
@@ -35,9 +35,23 @@ var (
 
 // flags for specific scan / parts of the tool e.g. the network scanner
 var (
-	//TODO: ->
+	funFlag = flag.String("f", "", "Specifiy the function to be ran by goapt")
+
 	// set a network interface for arp traffic (eth0 or ...have to find out)
 	ifaceFlag = flag.String("i", "eth0", "Network interface to use for ARP traffic")
+
+	// get ip for the scan, either a range or single ip
+	ipStart = flag.String("ips", "", "Set the starting ip address")
+	ipEnd   = flag.String("ipe", "", "Set the ending ip address")
+
+	// timeout flag
+	timeoutFlag = flag.Duration("d", 2*time.Second, "timeout to send the arp requests")
+
+	// count of e.g. requests
+	countFlag = flag.Int("c", 5, "specify the count of requests sent")
+
+	// set the mode of a simulation
+	simMode = flag.String("m", "safe", "Mode to run simulation in: -m <safe / attack>")
 )
 
 func main() {
@@ -47,9 +61,6 @@ func main() {
 	}
 	torControlPassword := os.Getenv("TOR_CONTROL_PASSWORD")
 
-	var modeCommand string
-	flag.StringVar(&modeCommand, "test_mode", "safe", "specify the mode in what you want to run the test: safe / attack")
-
 	// Pass target (the root directory or the directory from which the person wants to do the checks) as a command-line argument for now
 	// Maybe later make it optional to what will be ran in the tests, e.g. somebody doesnt want to test database things so he chooses the option without testing against db
 	// Mkae it like: go-aptt --type --action --optional_other_things
@@ -57,7 +68,6 @@ func main() {
 	flag.Parse()
 
 	args := flag.Args()
-	// fmt.Println(args)
 
 	// Test whether there is a flag and argument with that
 	if len(os.Args) < 2 {
@@ -75,7 +85,17 @@ func main() {
 		os.Exit(-1)
 	}
 
-	// target := args[0]
+	if *networkTest && *helpCommand {
+		fmt.Print(`
+	Usage of the network feature:
+		-h : help command for network
+		-f : function to be ran
+		-is : single ip or start of ip range
+		-ie : end of ip range
+
+`)
+		os.Exit(0)
+	}
 
 	if *helpCommand {
 		fmt.Print(`
@@ -132,7 +152,7 @@ func main() {
 	if *dbTest {
 		db_type := os.Args[1]
 		fmt.Println(db_type)
-		vulns, err := dbs.DB_Scan(modeCommand, db_type)
+		vulns, err := dbs.DB_Scan(*simMode, db_type)
 		if err != nil {
 			log.Fatalln("There was an error while processing the DB Scan: ", err)
 			os.Exit(1)
@@ -143,57 +163,38 @@ func main() {
 	}
 
 	if *networkTest {
+		var net_report network.NetReport
+		var err error
 		log.Println("Setting up the network tests")
-		// flag.Parse()
-		// if len(args) == 0 {
-		// fmt.Println("Error: No target provided. Please specify the target (e.g., directory, database URL, network range).")
-		// os.Exit(1)
-		// }
-		// --network scan (-t) addr (addr_start addr_end)
-		if len(args) < 2 || len(args) > 3 {
-			fmt.Println("Error: wrong number of arguments passed, see: --help network")
-			os.Exit(0)
-		}
 
-		fun := args[0]
+		fun := *funFlag
 
-		// lets make it so that I always have both start and end but the end maybe an empty string so check for that in the particular functions
-		// var addr_start, addr_end string
-		// addr_start = args[1]
-		// if len(args) == 3 {
-		// 	addr_end = args[2]
-		// } else {
-		// 	addr_end = ""
-		// }
-		// fmt.Printf("addr_start: %v; addr_end: %v; function: %v\n", addr_start, addr_end, fun)
-
-		// I can pass the args to the network scan and in there it checks what form of input it is and based on that it will work with it
+		ipArr, ifi := GetInputIPs(ifaceFlag, ipStart, ipEnd)
 
 		switch fun {
+		case "rscan":
+			log.Println("Running raw network scan...")
+
+			net_report, err = network.RawNetworkScan(ipArr, ifi, *timeoutFlag, countFlag)
+			if err != nil {
+				fmt.Printf("Error in the network scan: %v\n", err)
+			}
+			break
+
 		case "scan":
-			var ips []string
-			log.Println("Starting the network scan...")
-			addr_start, addr_end, isCidr, err := network.ParseInputs(args[1:])
-			if err != nil {
-				log.Fatalf("Error parsing the input values: %v\n", err)
-				os.Exit(1)
-			}
+			log.Println("Running higher level network scan...")
 
-			// generate the ips to scan (maybe can be done in the scan function by itself)
-			if isCidr {
-				ips = network.GenerateFromCIDR(addr_start)
-			} else {
-				ips = network.GenerateIPs(addr_start, addr_end)
-			}
-			log.Println("Found the ips: ", ips)
-			// just testing purposes
-			net_report, err := network.Network_scan(ips)
+			net_report, err = network.Network_scan(ipArr, *timeoutFlag, countFlag)
 			if err != nil {
-				fmt.Printf("Some error in the network scan: %v\n", err)
+				fmt.Printf("Error in the network scan: %v\n", err)
 			}
-			fmt.Println(net_report)
+			break
+
+		default:
+			log.Fatalf("Specify the function: -f <function>")
+			os.Exit(-1)
 		}
-
+		fmt.Println(net_report)
 		os.Exit(0)
 	}
 

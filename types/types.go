@@ -7,11 +7,26 @@ import (
 	"go/token"
 	"io/fs"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
+
+type IpStats struct {
+	Ip         net.IP
+	Latency    time.Duration
+	PacketLoss float64
+	Error      error
+}
+
+type NetReport struct {
+	IP      net.IP
+	MacAddr string // or later some other type
+	Report  string
+	Stats   IpStats
+}
 
 type Vulnerability struct {
 	Name        string
