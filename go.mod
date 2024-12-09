@@ -9,7 +9,7 @@ require (
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2 // indirect
-	github.com/KennyZ69/netlibK v0.0.0-20241204210445-cc87bbcbe837 // indirect
+	github.com/KennyZ69/netlibK v0.0.0-20241209201334-30fa99c56929 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/mdlayher/ethernet v0.0.0-20220221185849-529eae5b6118 // indirect

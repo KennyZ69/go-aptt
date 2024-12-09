@@ -4,6 +4,8 @@ github.com/KennyZ69/netlibK v0.0.0-20241130105805-d94be3430ab4 h1:mXC1ZlnlgA3KXQ
 github.com/KennyZ69/netlibK v0.0.0-20241130105805-d94be3430ab4/go.mod h1:T2RgZm9Lh5ZBAU8aukoqYN06mAfxj0OCCkuu4ldBpBE=
 github.com/KennyZ69/netlibK v0.0.0-20241204210445-cc87bbcbe837 h1:4H0GtMV4u1BCUhf/F32rjMQgcJSWqxhuqMHrD2aDU3U=
 github.com/KennyZ69/netlibK v0.0.0-20241204210445-cc87bbcbe837/go.mod h1:T2RgZm9Lh5ZBAU8aukoqYN06mAfxj0OCCkuu4ldBpBE=
+github.com/KennyZ69/netlibK v0.0.0-20241209201334-30fa99c56929 h1:Td35PWib4krsCgflREtpFUfEbHRdkd1V7JzX5znjh+Q=
+github.com/KennyZ69/netlibK v0.0.0-20241209201334-30fa99c56929/go.mod h1:T2RgZm9Lh5ZBAU8aukoqYN06mAfxj0OCCkuu4ldBpBE=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/google/go-cmp v0.5.6/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=

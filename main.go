@@ -184,7 +184,7 @@ func main() {
 		case "scan":
 			log.Println("Running higher level network scan...")
 
-			net_report, err = network.Network_scan(ipArr, *timeoutFlag, countFlag)
+			net_report, err = network.Network_scan(ipArr, ifi, *timeoutFlag, countFlag)
 			if err != nil {
 				fmt.Printf("Error in the network scan: %v\n", err)
 			}

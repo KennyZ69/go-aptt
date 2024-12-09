@@ -1,6 +1,7 @@
 package network
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"net"
@@ -55,9 +56,6 @@ func RawNetworkScan(ips []net.IP, ifi *net.Interface, timeout time.Duration, cou
 
 	wg.Wait()
 
-	// TODO: get the ip stats for each active host
-	// TODO: for each active host found I can do the arp requests to find its mac address
-
 	log.Printf("Found %d active hosts\n", active)
 
 	return report, nil
@@ -104,7 +102,7 @@ func rawDiscoverHosts(c *netlibk.Client, ips []net.IP, activeHosts chan<- net.IP
 	return err
 }
 
-func Network_scan(ips []net.IP, timeout time.Duration, countFlag *int) (NetReport, error) {
+func Network_scan(ips []net.IP, ifi *net.Interface, timeout time.Duration, countFlag *int) (NetReport, error) {
 	var report NetReport
 	var activeHosts = make(chan net.IP, len(ips))
 	var wg sync.WaitGroup
@@ -121,13 +119,17 @@ func Network_scan(ips []net.IP, timeout time.Duration, countFlag *int) (NetRepor
 	wg.Wait()
 	// close(activeHosts)
 
+	if len(activeHosts) == 0 {
+		return report, fmt.Errorf("No active host were discovered\n")
+	}
+
 	var activeCounter int
 	var hostsArr []net.IP
 	var stats = make(chan IpStats, len(activeHosts))
 
 	for host := range activeHosts {
 
-		fmt.Printf("Discovered active host: %s\n", host.String())
+		fmt.Printf("Discovered active host: %s \n", host.String())
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -140,6 +142,43 @@ func Network_scan(ips []net.IP, timeout time.Duration, countFlag *int) (NetRepor
 	wg.Wait()
 
 	log.Printf("Number of active hosts: %d\n", activeCounter)
+
+	var ipToMac map[string](chan net.HardwareAddr)
+	var count int
+
+	if len(hostsArr) > 0 {
+		retMac, err := discoverMAC(hostsArr[0], ifi, timeout)
+		if err != nil {
+			return report, fmt.Errorf("Error getting mac addr for the first host in arr")
+		}
+		fmt.Printf("Got the retMac: %v\n", retMac)
+
+		for _, host := range hostsArr {
+			hostMac, err := discoverMAC(host, ifi, timeout)
+			if err != nil {
+				return report, fmt.Errorf("There was an error getting mac addr for %s\n", host.String())
+			}
+
+			if bytes.Equal(retMac, hostMac) {
+				count++
+			}
+
+			// if I have sent arp more than thrice to the same addr then break from the loop
+			if count > 3 {
+				fmt.Println("Had to stop looking for mac addr")
+				break
+			}
+
+			if ipToMac[host.String()] == nil {
+				// ipToMac[host.String()] = make(chan net.HardwareAddr)
+				ipToMac[host.String()] <- hostMac
+				log.Printf("Storing %s : %v\n", host.String(), hostMac)
+			} else {
+				continue
+			}
+		}
+
+	}
 
 	// TODO: get the ip stats for each active host
 	// TODO: for each active host found I can do the arp requests to find its mac address
@@ -192,4 +231,24 @@ func discoverHosts(ips []net.IP, activeHosts chan<- net.IP, timeout time.Duratio
 	fmt.Println("If some host you expected to be active seems to not be, you may need to run this tool with sudo")
 
 	return err
+}
+
+func discoverMAC(ip net.IP, ifi *net.Interface, timeout time.Duration) (net.HardwareAddr, error) {
+	c, err := netlibk.ARPSetClient(ifi)
+	if err != nil {
+		return nil, fmt.Errorf("Error setting up client: %v\n", err)
+	}
+	defer c.Close()
+
+	if err = c.Conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return nil, fmt.Errorf("Error setting deadline on client: %v\n", err)
+	}
+
+	mac, err := c.ResolveMAC(ip, true)
+	fmt.Println(ip, mac)
+	if err != nil || mac == nil {
+		return nil, fmt.Errorf("Error resolving mac addr: %v\n", err)
+	}
+
+	return mac, nil
 }
