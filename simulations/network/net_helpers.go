@@ -5,6 +5,9 @@ import (
 	"log"
 	"net"
 	"net/netip"
+	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 
 	netlibk "github.com/KennyZ69/netlibK"
@@ -162,4 +165,23 @@ func MeasurePings(count int, targetIp net.IP, timeout time.Duration) IpStats {
 		Latency:    totalLatency / time.Duration(received),
 		PacketLoss: packetLoss,
 	}
+}
+
+func ulimit() int {
+	out, err := exec.Command("sh", "-c", "ulimit -n").Output()
+	if err != nil {
+		log.Fatalf("Error getting routines limit: %v\n", err) // end point for the program
+	}
+
+	s := strings.TrimSpace(string(out))
+	ulimit, err := strconv.Atoi(s)
+	// if err != nil || s == "unlimited" {
+	// 	// log.Fatal(err)
+	// 	return 100
+	// }
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return ulimit
 }

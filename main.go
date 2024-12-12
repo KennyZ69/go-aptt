@@ -193,8 +193,7 @@ func main() {
 			}
 			break
 
-		case "map":
-		case "mapper":
+		case "map", "mapper":
 			log.Println("Running network mapper ... ")
 
 			_, err := network.Mapper(ipArr, ifi, *portFlag)
