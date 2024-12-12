@@ -50,6 +50,18 @@ type Operation uint16
 const (
 	OperationRequest Operation = 1
 	OperationReply   Operation = 2
+
+	// listing out all the possible port numbers to scan / map
+	FTPdata    = 20
+	FTPcontrol = 21
+	SSH        = 22
+	Telnet     = 23
+	DNS        = 53
+	HTTP       = 80
+	HTTPS      = 443
+	MySQL      = 3306
+	PostgreSQL = 5432
+	RDP        = 3389 // remote desktop protocol
 )
 
 func (nr *NetReport) WriteReport() {}

@@ -52,6 +52,9 @@ var (
 
 	// set the mode of a simulation
 	simMode = flag.String("m", "safe", "Mode to run simulation in: -m <safe / attack>")
+
+	// port number to scan for open ports
+	portFlag = flag.Int("p", 22, "Port to scan on ip addr")
 )
 
 func main() {
@@ -190,10 +193,21 @@ func main() {
 			}
 			break
 
+		case "map":
+		case "mapper":
+			log.Println("Running network mapper ... ")
+
+			_, err := network.Mapper(ipArr, ifi, *portFlag)
+			if err != nil {
+				fmt.Printf("Error in network mapper: %v\n", err)
+			}
+			break
+
 		default:
 			log.Fatalf("Specify the function: -f <function>")
 			os.Exit(-1)
 		}
+
 		fmt.Println(net_report)
 		os.Exit(0)
 	}

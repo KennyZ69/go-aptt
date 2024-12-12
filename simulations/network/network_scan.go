@@ -146,7 +146,9 @@ func Network_scan(ips []net.IP, ifi *net.Interface, timeout time.Duration, count
 	var ipToMac map[string](chan net.HardwareAddr)
 	var count int
 
+	fmt.Println("Trying to discover mac addresses of active hosts ... ")
 	if len(hostsArr) > 0 {
+		// trying to get the first host's mac addr to know whether I should continue and to compare it later with others
 		retMac, err := discoverMAC(hostsArr[0], ifi, timeout)
 		if err != nil {
 			return report, fmt.Errorf("Error getting mac addr for the first host in arr")
@@ -180,8 +182,16 @@ func Network_scan(ips []net.IP, ifi *net.Interface, timeout time.Duration, count
 
 	}
 
-	// TODO: get the ip stats for each active host
-	// TODO: for each active host found I can do the arp requests to find its mac address
+	fmt.Println("Moving on to mapping the network ... ")
+
+	// semaphore := make(chan struct{}, 50) // can specify size to limit number of concurrent requests
+	//
+	// wg.Add(1)
+	// go func() {
+	// 	for _, host := range hostsArr {
+	// 		err := scanTCPPort(host)
+	// 	}
+	// }()
 
 	return report, nil
 }
@@ -190,27 +200,27 @@ func discoverHosts(ips []net.IP, activeHosts chan<- net.IP, timeout time.Duratio
 	var notActiveCounter, failedCounter int
 	payload := []byte("Hello world!")
 
-	log.Println("Trying to ping the found IPs and get a list of active ones...")
+	// log.Println("Trying to ping the found IPs and get a list of active ones...")
 
 	for _, ip := range ips {
 
 		wg.Add(1)
 		go func(targetIp net.IP) {
 			defer func() {
-				log.Printf("Finished pings on %s\n", targetIp.String())
+				// log.Printf("Finished pings on %s\n", targetIp.String())
 				wg.Done()
 			}()
-			fmt.Printf("Pinging %s\n", targetIp.String())
-			latency, active, err := netlibk.HigherLvlPing(targetIp, payload, timeout)
+			// fmt.Printf("Pinging %s\n", targetIp.String())
+			_, active, err := netlibk.HigherLvlPing(targetIp, payload, timeout)
 			if err != nil {
 				log.Printf("Failed to ping %s: %v\n", targetIp.String(), err)
 				failedCounter++
 			}
 			if active {
-				log.Printf("Host %s is active with latency of %v\nAdding to the list of active hosts...\n", targetIp.String(), latency)
+				// log.Printf("Host %s is active with latency of %v\nAdding to the list of active hosts...\n", targetIp.String(), latency)
 				activeHosts <- targetIp
 			} else {
-				log.Printf("%s is not active host\ncontinuing...\n", targetIp.String())
+				// log.Printf("%s is not active host\ncontinuing...\n", targetIp.String())
 				notActiveCounter++
 			}
 		}(ip)

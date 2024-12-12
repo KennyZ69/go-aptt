@@ -28,7 +28,7 @@ func GetInputIPs(ifaceFlag, ipStart, ipEnd *string) ([]net.IP, *net.Interface) {
 		ipArr = netlibk.GenerateIPs(addr_start, addr_end)
 	}
 
-	log.Println("Found the ips: ", ipArr)
+	// log.Println("Found the ips: ", ipArr)
 
 	return ipArr, ifi
 }
