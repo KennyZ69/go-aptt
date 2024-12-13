@@ -54,7 +54,7 @@ var (
 	simMode = flag.String("m", "safe", "Mode to run simulation in: -m <safe / attack>")
 
 	// port number to scan for open ports
-	portFlag = flag.Int("p", 22, "Port to scan on ip addr")
+	portFlag = flag.String("p", "22", "Port to scan on ip addr")
 )
 
 func main() {
@@ -175,7 +175,7 @@ func main() {
 		ipArr, ifi := GetInputIPs(ifaceFlag, ipStart, ipEnd)
 
 		switch fun {
-		case "rscan":
+		case "rscan": // this does not actually work so I'll let it be but maybe later I can try to fix it all
 			log.Println("Running raw network scan...")
 
 			net_report, err = network.RawNetworkScan(ipArr, ifi, *timeoutFlag, countFlag)
@@ -184,7 +184,7 @@ func main() {
 			}
 			break
 
-		case "scan":
+		case "scan", "scanner":
 			log.Println("Running higher level network scan...")
 
 			net_report, err = network.Network_scan(ipArr, ifi, *timeoutFlag, countFlag)

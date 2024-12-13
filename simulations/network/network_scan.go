@@ -117,7 +117,6 @@ func Network_scan(ips []net.IP, ifi *net.Interface, timeout time.Duration, count
 	}()
 
 	wg.Wait()
-	// close(activeHosts)
 
 	if len(activeHosts) == 0 {
 		return report, fmt.Errorf("No active host were discovered\n")
@@ -143,7 +142,7 @@ func Network_scan(ips []net.IP, ifi *net.Interface, timeout time.Duration, count
 
 	log.Printf("Number of active hosts: %d\n", activeCounter)
 
-	var ipToMac map[string](chan net.HardwareAddr)
+	var ipToMac = make(map[string](chan net.HardwareAddr))
 	var count int
 
 	fmt.Println("Trying to discover mac addresses of active hosts ... ")
@@ -172,7 +171,6 @@ func Network_scan(ips []net.IP, ifi *net.Interface, timeout time.Duration, count
 			}
 
 			if ipToMac[host.String()] == nil {
-				// ipToMac[host.String()] = make(chan net.HardwareAddr)
 				ipToMac[host.String()] <- hostMac
 				log.Printf("Storing %s : %v\n", host.String(), hostMac)
 			} else {
@@ -183,15 +181,6 @@ func Network_scan(ips []net.IP, ifi *net.Interface, timeout time.Duration, count
 	}
 
 	fmt.Println("Moving on to mapping the network ... ")
-
-	// semaphore := make(chan struct{}, 50) // can specify size to limit number of concurrent requests
-	//
-	// wg.Add(1)
-	// go func() {
-	// 	for _, host := range hostsArr {
-	// 		err := scanTCPPort(host)
-	// 	}
-	// }()
 
 	return report, nil
 }
@@ -254,7 +243,8 @@ func discoverMAC(ip net.IP, ifi *net.Interface, timeout time.Duration) (net.Hard
 		return nil, fmt.Errorf("Error setting deadline on client: %v\n", err)
 	}
 
-	mac, err := c.ResolveMAC(ip, true)
+	// set to true or false based on whether I want it to retry multiple times or not
+	mac, err := c.ResolveMAC(ip, false)
 	fmt.Println(ip, mac)
 	if err != nil || mac == nil {
 		return nil, fmt.Errorf("Error resolving mac addr: %v\n", err)
