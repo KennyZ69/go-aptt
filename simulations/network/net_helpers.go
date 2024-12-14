@@ -1,8 +1,10 @@
 package network
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"net/netip"
 	"os/exec"
@@ -12,6 +14,13 @@ import (
 
 	netlibk "github.com/KennyZ69/netlibK"
 )
+
+type MapResult struct {
+	Ip       net.IP
+	Protocol string
+	Port     int
+	Header   string
+}
 
 type IpStats struct {
 	Ip         net.IP
@@ -65,6 +74,8 @@ const (
 	MySQL      = 3306
 	PostgreSQL = 5432
 	RDP        = 3389 // remote desktop protocol
+
+	SYNFlag = 0x02
 )
 
 func (nr *NetReport) WriteReport() {}
@@ -184,4 +195,60 @@ func ulimit() int {
 	}
 
 	return ulimit
+}
+
+func BuildSynPacket(srcIp, destIp net.IP, port int) ([]byte, error) {
+	// make the header for the tcp connection -> src and dest ports
+	tcpHeader := make([]byte, 20)
+	srcPort := uint16(49152 + rand.Intn(65535-49152)) // dynamic range of ports to use as source port
+	destPort := uint16(port)
+
+	binary.BigEndian.PutUint16(tcpHeader[0:2], srcPort)
+	binary.BigEndian.PutUint16(tcpHeader[2:4], destPort)
+
+	tcpHeader[12] = (5 << 4) // data offset
+	tcpHeader[13] = SYNFlag
+
+	ipHeader := make([]byte, 20)
+	ipHeader[0] = 0x45 // version and header length (IHL)
+	ipHeader[8] = 64   // TTL
+	ipHeader[9] = 6    // Protocol
+	copy(ipHeader[12:16], srcIp.To4())
+	copy(ipHeader[16:20], destIp.To4())
+
+	checksum := tcpChecksum(srcIp.To4(), destIp.To4(), tcpHeader)
+	binary.BigEndian.PutUint16(tcpHeader[16:18], checksum)
+
+	// combine them to return
+	return append(ipHeader, tcpHeader...), nil
+}
+
+func tcpChecksum(srcIp, destIp net.IP, tcpHeader []byte) uint16 {
+	h := make([]byte, 12)
+	copy(h[0:4], srcIp.To4())
+	copy(h[4:8], destIp.To4())
+	h[9] = 6
+	binary.BigEndian.PutUint16(h[10:12], uint16(len(tcpHeader)))
+
+	data := append(h, tcpHeader...)
+	return checksum(data)
+}
+
+// I guess I could do this function as a global util in a library or something
+func checksum(data []byte) uint16 {
+	var sum uint32
+
+	// converting, shifting the bits and the "|" is a bitwise OR to combine those two 8-bit values into one 16 bit val
+	for i := 0; i < len(data)-1; i += 2 {
+		sum += uint32(data[i])<<8 | uint32(data[i+1])
+	}
+	if len(data)%2 == 1 {
+		sum += uint32(data[len(data)-1]) << 8
+	}
+	// ensuring no overflown bits remain there, extracting them and adding them to the lower 16 bits
+	sum = (sum >> 16) + (sum & 0xffff)
+	sum += (sum >> 16)
+
+	// one's complement -> inverts all bits so 0 to 1 and 1 to 0
+	return uint16(^sum)
 }

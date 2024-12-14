@@ -8,17 +8,32 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	netlibk "github.com/KennyZ69/netlibK"
 )
 
 func Mapper(ipArr []net.IP, ifi *net.Interface, p string) (NetReport, error) {
 	var report NetReport
 	var wg sync.WaitGroup
+	var ports []int
+	var err error
 
-	ports, err := parsePortFlag(p)
-	if err != nil {
-		return NetReport{}, fmt.Errorf("Error: Could not convert port flag to int: %v\n", err)
+	// var result MapResult
+
+	if strings.Contains(p, "-") {
+		ports, err = parsePortFlag(p)
+		if err != nil {
+			return NetReport{}, fmt.Errorf("Error: Could not convert port flag to int: %v\n", err)
+		}
+		// fmt.Println(ports)
+	} else {
+		port, err := strconv.Atoi(p)
+		if err != nil {
+			return NetReport{}, fmt.Errorf("Error: Could not convert port flag to int: %v\n", err)
+		}
+		ports = append(ports, port)
 	}
-	fmt.Println(ports)
+
 	smLimit := ulimit()
 	semaphore := make(chan struct{}, smLimit) // get the limit for semaphore by running ulimit on the client's device
 
@@ -74,6 +89,41 @@ func scanTCPPort(ip net.IP, port int, semaphore chan struct{}) error {
 	return nil
 }
 
+func scanSYNPort(ip net.IP, port int, ifi *net.Interface, semaphore chan struct{}) error {
+	c, err := net.ListenPacket("ip4:tcp", ip.String())
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	cl, err := netlibk.New(ifi, c)
+	if err != nil {
+		return fmt.Errorf("Error making new client for port scanning: %v\n", err)
+	}
+
+	// build packet
+	p, err := BuildSynPacket(cl.SourceIp, ip, port)
+	if err != nil {
+		return err
+	}
+
+	// send the packet
+	n, err := c.WriteTo(p, &net.IPAddr{IP: ip})
+	if err != nil {
+		return fmt.Errorf("Error writing the packet to connection: %v\n", err)
+	}
+
+	// listen for a response
+	buf := make([]byte, 4096)
+	c.SetReadDeadline(time.Now().Add(time.Second * 2))
+	n, _, err = c.ReadFrom(buf)
+	if err != nil {
+		return fmt.Errorf("No response from syn request: %v\n", err)
+	}
+
+	// now analyze somehow the gotten response
+}
+
 func getPortHeader(c net.Conn) (string, error) {
 	buf := make([]byte, 2048)
 	c.SetReadDeadline(time.Now().Add(time.Second * 3))
@@ -100,7 +150,7 @@ func parsePortFlag(p string) ([]int, error) {
 	var ports []int
 
 	parts := strings.Split(p, "-")
-	if len(parts) != 2 {
+	if len(parts) > 2 { // i can have two parts of a range or a single port number
 		return nil, fmt.Errorf("Invalid port range given\n")
 	}
 
