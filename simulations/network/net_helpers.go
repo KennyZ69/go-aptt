@@ -13,6 +13,8 @@ import (
 	"time"
 
 	netlibk "github.com/KennyZ69/netlibK"
+	"github.com/google/gopacket"
+	layers "github.com/google/gopacket/layers"
 )
 
 type MapResult struct {
@@ -197,10 +199,13 @@ func ulimit() int {
 	return ulimit
 }
 
-func BuildSynPacket(srcIp, destIp net.IP, port int) ([]byte, error) {
+func BuildSynPacket(srcIp, destIp net.IP, port int) ([]byte, int, error) { // return the packet with source port and error
 	// make the header for the tcp connection -> src and dest ports
 	tcpHeader := make([]byte, 20)
-	srcPort := uint16(49152 + rand.Intn(65535-49152)) // dynamic range of ports to use as source port
+	// srcPort := uint16(49152 + rand.Intn(65535-49152)) // dynamic range of ports to use as source port
+	// srcPort := uint16(rand.Intn(65535-1024) + 1024) // Random port in ephemeral range
+	p := (rand.Intn(65535-1024) + 1024)
+	srcPort := uint16(p)
 	destPort := uint16(port)
 
 	binary.BigEndian.PutUint16(tcpHeader[0:2], srcPort)
@@ -220,7 +225,34 @@ func BuildSynPacket(srcIp, destIp net.IP, port int) ([]byte, error) {
 	binary.BigEndian.PutUint16(tcpHeader[16:18], checksum)
 
 	// combine them to return
-	return append(ipHeader, tcpHeader...), nil
+	return append(ipHeader, tcpHeader...), p, nil
+}
+
+func BuildRST(srcIp, destIp net.IP, srcPort, destPort int) ([]byte, error) {
+	// build headers for the rst (reset)
+	ipH := layers.IPv4{
+		SrcIP:    srcIp,
+		DstIP:    destIp,
+		Protocol: layers.IPProtocolTCP,
+	}
+
+	tcpH := layers.TCP{
+		SrcPort: layers.TCPPort(srcPort),
+		DstPort: layers.TCPPort(destPort),
+		RST:     true,
+	}
+
+	if err := tcpH.SetNetworkLayerForChecksum(&ipH); err != nil {
+		return nil, fmt.Errorf("Error setting checksum for tcp header in rst: %v\n", err)
+	}
+
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}
+	if err := gopacket.SerializeLayers(buf, opts, &ipH, &tcpH); err != nil {
+		return nil, fmt.Errorf("Error serializing RST packet: %v\n", err)
+	}
+
+	return buf.Bytes(), nil
 }
 
 func tcpChecksum(srcIp, destIp net.IP, tcpHeader []byte) uint16 {
@@ -251,4 +283,15 @@ func checksum(data []byte) uint16 {
 
 	// one's complement -> inverts all bits so 0 to 1 and 1 to 0
 	return uint16(^sum)
+}
+
+func isSYNAck(p []byte) bool {
+	if len(p) < 40 {
+		return false
+	}
+
+	tcpHeader := p[20:40]
+
+	flags := tcpHeader[13]
+	return flags&0x12 == 0x12
 }

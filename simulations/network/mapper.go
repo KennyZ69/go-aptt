@@ -3,6 +3,7 @@ package network
 import (
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -45,11 +46,15 @@ func Mapper(ipArr []net.IP, ifi *net.Interface, p string) (NetReport, error) {
 			wg.Add(1)
 			go func(host net.IP, port int) {
 				defer wg.Done()
+				log.Println("Running usual tcp conn scan")
 				err := scanTCPPort(host, port, semaphore)
 				if err != nil {
-					fmt.Print(err)
+					fmt.Println(err)
 				}
-				// the function itself prints if the port is open on given ip addr
+				log.Println("Running syn requests to scan")
+				if err = scanSYNPort(host, port, ifi, semaphore); err != nil {
+					fmt.Println(err)
+				}
 			}(ip, port)
 		}
 	}
@@ -70,14 +75,14 @@ func scanTCPPort(ip net.IP, port int, semaphore chan struct{}) error {
 			time.Sleep(time.Second * 2)
 			scanTCPPort(ip, port, semaphore)
 		} else {
-			fmt.Println("\nport", port, "closed on", ip.String())
+			fmt.Println("\nTCP - Port", port, "closed on", ip.String())
 			return err
 		}
 	}
 
 	defer c.Close()
 
-	fmt.Printf("\nPort %d is open on %s\n", port, ip.String())
+	fmt.Printf("\nTCP - Port %d is open on %s\n", port, ip.String())
 
 	h, err := getPortHeader(c)
 	if err != nil || h == "" {
@@ -90,6 +95,9 @@ func scanTCPPort(ip net.IP, port int, semaphore chan struct{}) error {
 }
 
 func scanSYNPort(ip net.IP, port int, ifi *net.Interface, semaphore chan struct{}) error {
+	semaphore <- struct{}{}
+	defer func() { <-semaphore }()
+
 	c, err := net.ListenPacket("ip4:tcp", ip.String())
 	if err != nil {
 		return err
@@ -102,7 +110,7 @@ func scanSYNPort(ip net.IP, port int, ifi *net.Interface, semaphore chan struct{
 	}
 
 	// build packet
-	p, err := BuildSynPacket(cl.SourceIp, ip, port)
+	p, srcP, err := BuildSynPacket(cl.SourceIp, ip, port)
 	if err != nil {
 		return err
 	}
@@ -122,6 +130,23 @@ func scanSYNPort(ip net.IP, port int, ifi *net.Interface, semaphore chan struct{
 	}
 
 	// now analyze somehow the gotten response
+
+	if isSYNAck(buf[:n]) {
+		fmt.Printf("\nSYN - Port %d is open on %s\n", port, ip.String())
+		rstPacket, err := BuildRST(cl.SourceIp, ip, srcP, port)
+		if err != nil {
+			fmt.Printf("Error building RST packet: %v\n", err)
+		}
+		_, err = c.WriteTo(rstPacket, &net.IPAddr{IP: ip})
+		if err != nil {
+			fmt.Printf("Error sending RST packet: %v\n", err)
+		}
+	} else {
+		fmt.Printf("\nSYN - Port %d on %s is closed or filtered\n", port, ip.String())
+		fmt.Println("This SYN scan results may vary from a full 3-way TCP handshake")
+	}
+
+	return nil
 }
 
 func getPortHeader(c net.Conn) (string, error) {
