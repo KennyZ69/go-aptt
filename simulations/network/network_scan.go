@@ -1,14 +1,15 @@
 package network
 
 import (
-	"bytes"
 	"fmt"
 	"log"
 	"net"
+	"net/netip"
 	"sync"
 	"time"
 
 	netlibk "github.com/KennyZ69/netlibK"
+	"github.com/mdlayher/arp"
 )
 
 func RawNetworkScan(ips []net.IP, ifi *net.Interface, timeout time.Duration, countFlag *int) (NetReport, error) {
@@ -143,36 +144,49 @@ func Network_scan(ips []net.IP, ifi *net.Interface, timeout time.Duration, count
 	log.Printf("Number of active hosts: %d\n", activeCounter)
 
 	var ipToMac = make(map[string](chan net.HardwareAddr))
-	var count int
+	// var count int
 
 	fmt.Println("Trying to discover mac addresses of active hosts ... ")
 	if len(hostsArr) > 0 {
-		// trying to get the first host's mac addr to know whether I should continue and to compare it later with others
-		retMac, err := discoverMAC(hostsArr[0], ifi, timeout)
-		if err != nil {
-			return report, fmt.Errorf("Error getting mac addr for the first host in arr")
-		}
-		fmt.Printf("Got the retMac: %v\n", retMac)
+		// retMac, err := discoverMAC(hostsArr[0], ifi, timeout)
+		// if err != nil {
+		// 	return report, fmt.Errorf("Error getting mac addr for the first host in arr")
+		// }
+		// fmt.Printf("Got the retMac: %v\n", retMac)
+		//
+		// for _, host := range hostsArr {
+		// 	hostMac, err := discoverMAC(host, ifi, timeout)
+		// 	if err != nil {
+		// 		return report, fmt.Errorf("There was an error getting mac addr for %s\n", host.String())
+		// 	}
+		//
+		// 	if bytes.Equal(retMac, hostMac) {
+		// 		count++
+		// 	}
+		//
+		// 	// if I have sent arp more than thrice to the same addr then break from the loop
+		// 	if count > 3 {
+		// 		fmt.Println("Had to stop looking for mac addr")
+		// 		break
+		// 	}
+		//
+		// 	if ipToMac[host.String()] == nil {
+		// 		ipToMac[host.String()] <- hostMac
+		// log.Printf("Storing %s : %v\n", host.String(), hostMac)
+		// 	} else {
+		// 		continue
+		// 	}
+		// }
 
 		for _, host := range hostsArr {
-			hostMac, err := discoverMAC(host, ifi, timeout)
+			mac, err := discoverMac(host, ifi)
 			if err != nil {
-				return report, fmt.Errorf("There was an error getting mac addr for %s\n", host.String())
-			}
-
-			if bytes.Equal(retMac, hostMac) {
-				count++
-			}
-
-			// if I have sent arp more than thrice to the same addr then break from the loop
-			if count > 3 {
-				fmt.Println("Had to stop looking for mac addr")
-				break
+				return report, err
 			}
 
 			if ipToMac[host.String()] == nil {
-				ipToMac[host.String()] <- hostMac
-				log.Printf("Storing %s : %v\n", host.String(), hostMac)
+				ipToMac[host.String()] <- mac
+				log.Printf("Storing %s : %v\n", host.String(), mac)
 			} else {
 				continue
 			}
@@ -248,6 +262,27 @@ func discoverMAC(ip net.IP, ifi *net.Interface, timeout time.Duration) (net.Hard
 	fmt.Println(ip, mac)
 	if err != nil || mac == nil {
 		return nil, fmt.Errorf("Error resolving mac addr: %v\n", err)
+	}
+
+	return mac, nil
+}
+
+// implementation not using my own library ('cause I can't figure it out to work)
+func discoverMac(ip net.IP, ifi *net.Interface) (net.HardwareAddr, error) {
+	c, err := arp.Dial(ifi)
+	if err != nil {
+		return nil, fmt.Errorf("Error: failed to dial client: %v\n", err)
+	}
+
+	defer c.Close()
+
+	targetIp, err := netip.ParseAddr(ip.String())
+	if err != nil {
+		return nil, fmt.Errorf("Error parsing net.IP to netip.Addr: %v\n", err)
+	}
+	mac, err := c.Resolve(targetIp)
+	if err != nil {
+		return nil, fmt.Errorf("Error resolving for mac addr on %s: %v\n", ip.String(), err)
 	}
 
 	return mac, nil
