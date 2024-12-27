@@ -21,7 +21,7 @@ func Mapper(ipArr []net.IP, ifi *net.Interface, p string) (NetReport, error) {
 
 	// var result MapResult
 
-	if strings.Contains(p, "-") {
+	if strings.Contains(p, "-") { // getting a port range using "-"
 		ports, err = parsePortFlag(p)
 		if err != nil {
 			return NetReport{}, fmt.Errorf("Error: Could not convert port flag to int: %v\n", err)
@@ -91,6 +91,9 @@ func scanTCPPort(ip net.IP, port int, semaphore chan struct{}) error {
 	} else {
 		fmt.Printf("\nHeader for port %d on %s: %s\n", port, ip.String(), h)
 	}
+
+	service := getService(h)
+	fmt.Printf("Running service on port %d: %s\n", port, service)
 	return nil
 }
 
@@ -146,6 +149,18 @@ func scanSYNPort(ip net.IP, port int, ifi *net.Interface, semaphore chan struct{
 		fmt.Println("This SYN scan results may vary from a full 3-way TCP handshake")
 	}
 
+	// I am passing net.PacketConn to net.Conn so I should later change it somehow
+	// h, err := getPortHeader(c)
+	// if err != nil || h == "" {
+	// 	// return fmt.Errorf("Error getinng port header: %v\n", err)
+	// 	fmt.Printf("\nCouldn't get the header for port %d on %s: %v\n", port, ip.String(), err)
+	// } else {
+	// 	fmt.Printf("\nHeader for port %d on %s: %s\n", port, ip.String(), h)
+	// }
+	//
+	// service := getService(h)
+	// fmt.Printf("Running service on port %d: %s\n", port, service)
+
 	return nil
 }
 
@@ -195,4 +210,14 @@ func parsePortFlag(p string) ([]int, error) {
 
 	return ports, nil
 
+}
+
+func getService(header string) string {
+	for signature, service := range serviceSignatures {
+		if strings.Contains(header, signature) {
+			return service
+		}
+	}
+
+	return "Unknown service on open port"
 }

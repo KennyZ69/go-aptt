@@ -202,14 +202,15 @@ func discoverHosts(ips []net.IP, activeHosts chan<- net.IP, timeout time.Duratio
 			// fmt.Printf("Pinging %s\n", targetIp.String())
 			_, active, err := netlibk.HigherLvlPing(targetIp, payload, timeout)
 			if err != nil {
-				log.Printf("Failed to ping %s: %v\n", targetIp.String(), err)
+				// log.Printf("Failed to ping %s: %v\n", targetIp.String(), err)
 				failedCounter++
 			}
 			if active {
 				// log.Printf("Host %s is active with latency of %v\nAdding to the list of active hosts...\n", targetIp.String(), latency)
+				// log.Printf("Host %s is active with latency of %v\n", targetIp.String(), latency)
 				activeHosts <- targetIp
 			} else {
-				// log.Printf("%s is not active host\ncontinuing...\n", targetIp.String())
+				// log.Printf("%s is not active host\n", targetIp.String())
 				notActiveCounter++
 			}
 		}(ip)
@@ -227,7 +228,7 @@ func discoverHosts(ips []net.IP, activeHosts chan<- net.IP, timeout time.Duratio
 		err = fmt.Errorf("All tries for pings failed, you may need to run this with sudo or there is another problem... check your reports logs")
 	}
 
-	fmt.Println("If some host you expected to be active seems to not be, you may need to run this tool with sudo")
+	fmt.Println("If some host you expected to be active seems to not be, you may need to run this tool with sudo (admin privileges)")
 
 	return err
 }

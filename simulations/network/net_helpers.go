@@ -61,6 +61,20 @@ type ArpPacket struct {
 // just to specify the operation as either reply or request
 type Operation uint16
 
+var serviceSignatures = map[string]string{
+	"220":               "FTP",
+	"220 Service ready": "SMTP",
+	"SSH":               "SSH",
+	"HTTP/1.1":          "HTTP",
+	"HTTP/2":            "HTTP/2",
+	"MySQL":             "MySQL",
+	"PostgreSQL":        "PostgreSQL",
+	"Redis":             "Redis",
+	"ELASTICSEARCH":     "Elasticsearch",
+}
+
+type PortState uint8
+
 const (
 	OperationRequest Operation = 1
 	OperationReply   Operation = 2
@@ -70,6 +84,7 @@ const (
 	FTPcontrol = 21
 	SSH        = 22
 	Telnet     = 23
+	SMTP       = 25
 	DNS        = 53
 	HTTP       = 80
 	HTTPS      = 443
@@ -78,6 +93,11 @@ const (
 	RDP        = 3389 // remote desktop protocol
 
 	SYNFlag = 0x02
+
+	PortUnknown PortState = iota
+	PortOpen
+	PortClosed
+	PortFiltered
 )
 
 func (nr *NetReport) WriteReport() {}

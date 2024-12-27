@@ -27,8 +27,8 @@ var (
 	pruneAllCmd  = flag.Bool("prune", false, "Add to prune all docker images and volumes after running your tests")
 	helpCommand  = flag.Bool("h", false, "Usage: ")
 	simsCommand  = flag.Bool("sims", false, "Specific simulation tests: ")
-	codebaseTest = flag.Bool("codebase", false, "Run Security Scan on provided codebase (given file or directory)")
-	networkTest  = flag.Bool("network", false, "Run Security Scan on network with given address")
+	codebaseTest = flag.Bool("cb", false, "Run Security Scan on provided codebase (given file or directory)") // cb as in codebase
+	networkTest  = flag.Bool("net", false, "Run Security Scan on network with given address")
 	dbTest       = flag.Bool("db", false, "Run Security Scan on database with given host, user, port and type")
 	runCommand   = flag.Bool("run", false, "Specify what exact simulation test you want to run")
 )
@@ -173,17 +173,30 @@ func main() {
 		fun := *funFlag
 
 		ipArr, ifi := GetInputIPs(ifaceFlag, ipStart, ipEnd)
+		// -ips and -ipe flags for ip ranges
+		// -i for net interface (base is eno1)
 
+		// I'd say that every scan function could return also its time.Duration to log how long it had taken to finish
 		switch fun {
+		case "ping", "hS", "hs": // as in host discovery
+			dur, err := network.PingScan(ipArr, *timeoutFlag)
+			if err != nil {
+				log.Fatalf("Error in the ping scan: %v\n", err)
+			}
+			fmt.Println()
+			log.Printf("Ping function ran succesfully and took %v\n", dur)
+			break
+		case "port", "ps", "pS":
+			log.Println("Running port scanner ...")
+		case "arp", "aS", "as":
+			log.Println("Running arp scanner ...")
 		case "rscan": // this does not actually work so I'll let it be but maybe later I can try to fix it all
 			log.Println("Running raw network scan...")
-
 			net_report, err = network.RawNetworkScan(ipArr, ifi, *timeoutFlag, countFlag)
 			if err != nil {
 				fmt.Printf("Error in the network scan: %v\n", err)
 			}
 			break
-
 		case "scan", "scanner":
 			log.Println("Running higher level network scan...")
 
