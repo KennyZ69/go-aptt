@@ -1,11 +1,14 @@
 module github.com/KennyZ69/go-aptt
 
-go 1.23.2
+go 1.23.4
 
 require (
 	github.com/KennyZ69/netlibK v0.0.0-20241209201334-30fa99c56929
+	github.com/KennyZ69/portslibK v0.0.0-20241225212251-4e54e2bc4cfc
+	github.com/google/gopacket v1.1.19
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
+	github.com/mdlayher/arp v0.0.0-20220512170110-6706a2966875
 	github.com/schollz/progressbar/v3 v3.17.0
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/net v0.30.0
@@ -13,13 +16,12 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/google/gopacket v1.1.19 // indirect
 	github.com/josharian/native v1.0.0 // indirect
-	github.com/mdlayher/arp v0.0.0-20220512170110-6706a2966875 // indirect
 	github.com/mdlayher/ethernet v0.0.0-20220221185849-529eae5b6118 // indirect
 	github.com/mdlayher/packet v1.0.0 // indirect
 	github.com/mdlayher/socket v0.2.1 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
+	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect

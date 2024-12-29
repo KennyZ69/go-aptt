@@ -55,6 +55,9 @@ var (
 
 	// port number to scan for open ports
 	portFlag = flag.String("p", "22", "Port to scan on ip addr")
+
+	// scan type for the port scanner requests / connections
+	scanTypeFlag = flag.String("st", "cS", "Scan type for the port scanner")
 )
 
 func main() {
@@ -184,12 +187,18 @@ func main() {
 				log.Fatalf("Error in the ping scan: %v\n", err)
 			}
 			fmt.Println()
-			log.Printf("Ping function ran succesfully and took %v\n", dur)
-			break
+			log.Printf("Ping scan ended in %v\n", dur)
+			os.Exit(0)
 		case "port", "ps", "pS":
-			log.Println("Running port scanner ...")
+			dur, err := network.PortScan(*portFlag, *scanTypeFlag, ipArr, *timeoutFlag) // add the port scan type flag and based on that the cases
+			if err != nil {
+				log.Fatalf("Error in the port scan: %v\n", err)
+			}
+			log.Printf("Port scan ended in %v\n", dur)
+			os.Exit(0)
 		case "arp", "aS", "as":
 			log.Println("Running arp scanner ...")
+			os.Exit(0)
 		case "rscan": // this does not actually work so I'll let it be but maybe later I can try to fix it all
 			log.Println("Running raw network scan...")
 			net_report, err = network.RawNetworkScan(ipArr, ifi, *timeoutFlag, countFlag)

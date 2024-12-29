@@ -16,23 +16,10 @@ import (
 func Mapper(ipArr []net.IP, ifi *net.Interface, p string) (NetReport, error) {
 	var report NetReport
 	var wg sync.WaitGroup
-	var ports []int
-	var err error
 
-	// var result MapResult
-
-	if strings.Contains(p, "-") { // getting a port range using "-"
-		ports, err = parsePortFlag(p)
-		if err != nil {
-			return NetReport{}, fmt.Errorf("Error: Could not convert port flag to int: %v\n", err)
-		}
-		// fmt.Println(ports)
-	} else {
-		port, err := strconv.Atoi(p)
-		if err != nil {
-			return NetReport{}, fmt.Errorf("Error: Could not convert port flag to int: %v\n", err)
-		}
-		ports = append(ports, port)
+	ports, err := parsePortFlag(p)
+	if err != nil {
+		return NetReport{}, err
 	}
 
 	smLimit := ulimit()
@@ -189,27 +176,34 @@ func getProtocol(c net.Conn, ip net.IP, port int) (string, error) {
 func parsePortFlag(p string) ([]int, error) {
 	var ports []int
 
-	parts := strings.Split(p, "-")
-	if len(parts) > 2 { // i can have two parts of a range or a single port number
-		return nil, fmt.Errorf("Invalid port range given\n")
-	}
+	if strings.Contains(p, "-") { // getting a port range using "-"
+		parts := strings.Split(p, "-")
+		if len(parts) > 2 { // i can have two parts of a range or a single port number
+			return nil, fmt.Errorf("Invalid port range given\n")
+		}
 
-	ps, err := strconv.Atoi(parts[0])
-	if err != nil {
-		return nil, err
-	}
+		ps, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return nil, err
+		}
 
-	pe, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return nil, err
-	}
+		pe, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return nil, err
+		}
 
-	for i := ps; i <= pe; i++ {
-		ports = append(ports, i)
+		for i := ps; i <= pe; i++ {
+			ports = append(ports, i)
+		}
+	} else {
+		port, err := strconv.Atoi(p)
+		if err != nil {
+			return nil, fmt.Errorf("Error converting port to int: %v\n", err)
+		}
+		ports = append(ports, port)
 	}
 
 	return ports, nil
-
 }
 
 func getService(header string) string {

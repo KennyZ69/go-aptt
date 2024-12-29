@@ -11,9 +11,18 @@ type GeneralOptions struct {
 	JSONOutput         bool
 	DisableUpdateCheck bool
 	EnableProgressBar  bool
+	HelpFlag           bool
+	ListSimsFlag       bool
+	PruneAllDocker     bool
 }
 
 type NetOptions struct {
+	FunFlag      string
+	IfaceFlag    string
+	IpFlag       string
+	PortFlag     string
+	PortScanType string
+
 	ServiceDiscovery  bool
 	ArpPing           bool
 	Ping              bool
@@ -26,8 +35,12 @@ type NetOptions struct {
 type SimOptions struct {
 	// TODO
 	// add the simulation functions as bool flags here
-	NetFlag bool
-	DDOS    bool
+	CodebaseScanFlag bool
+	NetFlag          bool
+	DDOS             bool
+	SQLi             bool // sql injection simulation
+	RunFlag          string
+	DBTestFlag       bool
 }
 
 // TODO
@@ -47,6 +60,11 @@ func ParseNetOptions() *NetOptions {
 
 	flagSet := flag.NewFlagSet("net", flag.ExitOnError)
 
+	flagSet.StringVar(&options.FunFlag, "f", "scan", "Specify what function to run on network sim (default to 'scan')")
+	flagSet.StringVar(&options.IfaceFlag, "i", "eth0", "Network interface to use for network sim")
+	flagSet.StringVar(&options.IpFlag, "ip", "", "IP to use in network scan (either single or CIDR)")
+	flagSet.StringVar(&options.PortFlag, "p", "22", "Port (or a port range using '-') to use for port scanner")
+
 	flagSet.BoolVar(&options.ServiceDiscovery, "service", false, "Enable service discovery")
 	flagSet.BoolVar(&options.Ping, "ping", true, "Enable ping functionality")
 	flagSet.BoolVar(&options.ArpPing, "arp", false, "Enable ARP ping")
@@ -55,6 +73,21 @@ func ParseNetOptions() *NetOptions {
 
 	flagSet.IntVar(&options.timeFlag, "timeout", 2, "Set timeout in seconds (default to 2s)")
 	options.Timeout = time.Duration(options.timeFlag)
+
+	return options
+}
+
+func ParseSimOptions() *SimOptions {
+	options := &SimOptions{}
+
+	flagSet := flag.NewFlagSet("sim", flag.ExitOnError)
+
+	flagSet.BoolVar(&options.CodebaseScanFlag, "cb", false, "Run security scan on provided codebase")
+	flagSet.BoolVar(&options.NetFlag, "net", false, "Run security scan on a given network")
+	flagSet.BoolVar(&options.CodebaseScanFlag, "cb", false, "Run security scan on provided codebase")
+	flagSet.BoolVar(&options.DDOS, "dd", false, "Run ddos script on url or a codebase in docker")
+	flagSet.BoolVar(&options.SQLi, "sq", false, "Run SQL injection simulation on url or a codebase in docker")
+	flagSet.StringVar(&options.RunFlag, "run", "", "Specify what simulation test you want to run")
 
 	return options
 }
