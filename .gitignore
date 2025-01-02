@@ -3,3 +3,5 @@ dos_sim_report.log
 scan.log
 sqli_sim_report.log
 notes.md
+cmd/.env
+.gitignore

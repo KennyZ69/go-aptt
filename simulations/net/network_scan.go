@@ -179,7 +179,8 @@ func Network_scan(ips []net.IP, ifi *net.Interface, timeout time.Duration, count
 		// }
 
 		for _, host := range hostsArr {
-			mac, err := discoverMac(host, ifi)
+			// mac, err := discoverMac(host, ifi)
+			mac, err := discoverMAC(host, ifi, timeout) // using my own lib (on my net and pc I am always getting arp timeout)
 			if err != nil {
 				return report, err
 			}
@@ -193,8 +194,6 @@ func Network_scan(ips []net.IP, ifi *net.Interface, timeout time.Duration, count
 		}
 
 	}
-
-	fmt.Println("Moving on to mapping the network ... ")
 
 	return report, nil
 }

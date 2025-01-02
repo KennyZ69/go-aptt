@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -12,28 +14,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KennyZ69/go-aptt/simulations/dbs"
+	"github.com/KennyZ69/go-aptt/simulations/codebase"
+	"github.com/KennyZ69/go-aptt/simulations/db"
 	"github.com/KennyZ69/go-aptt/simulations/ddos"
-	"github.com/KennyZ69/go-aptt/simulations/inter"
-	"github.com/KennyZ69/go-aptt/simulations/network"
-	"github.com/KennyZ69/go-aptt/simulations/sqli"
+	"github.com/KennyZ69/go-aptt/simulations/net"
+	"github.com/KennyZ69/go-aptt/simulations/sql"
 	"github.com/KennyZ69/go-aptt/types"
+	netlibk "github.com/KennyZ69/netlibK"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
-// The flags to use to specify which part of the tool the client is going to use whether it be network scanner or codebase scanner or what...
-var (
-	pruneAllCmd  = flag.Bool("prune", false, "Add to prune all docker images and volumes after running your tests")
-	helpCommand  = flag.Bool("h", false, "Usage: ")
-	simsCommand  = flag.Bool("sims", false, "Specific simulation tests: ")
-	codebaseTest = flag.Bool("cb", false, "Run Security Scan on provided codebase (given file or directory)") // cb as in codebase
-	networkTest  = flag.Bool("net", false, "Run Security Scan on network with given address")
-	dbTest       = flag.Bool("db", false, "Run Security Scan on database with given host, user, port and type")
-	runCommand   = flag.Bool("run", false, "Specify what exact simulation test you want to run")
-)
-
-// flags for specific scan / parts of the tool e.g. the network scanner
 var (
 	funFlag = flag.String("f", "", "Specifiy the function to be ran by goapt")
 
@@ -61,49 +52,51 @@ var (
 )
 
 func main() {
+	fmt.Println("Args: ", os.Args)
 	err := godotenv.Load()
 	if err != nil {
 		fmt.Println("There was an error loading the .env file: ", err)
 	}
 	torControlPassword := os.Getenv("TOR_CONTROL_PASSWORD")
 
-	// Pass target (the root directory or the directory from which the person wants to do the checks) as a command-line argument for now
-	// Maybe later make it optional to what will be ran in the tests, e.g. somebody doesnt want to test database things so he chooses the option without testing against db
-	// Mkae it like: go-aptt --type --action --optional_other_things
-
-	flag.Parse()
+	// parsing the general options
+	genOp := ParseOptions()
+	simOp := ParseSimOptions()
 
 	args := flag.Args()
 
 	// Test whether there is a flag and argument with that
 	if len(os.Args) < 2 {
-		fmt.Println("Missing arguments and flags: see: go-aptt --help")
+		fmt.Println("Missing flags: see: goapt -h")
 		os.Exit(-1)
 	}
 
-	if !*codebaseTest && !*dbTest && !*networkTest && !*helpCommand && !*simsCommand && !*runCommand {
+	if !simOp.CodebaseScanFlag && !simOp.DBTestFlag && !simOp.NetFlag && !genOp.HelpFlag && !genOp.ListSimsFlag && simOp.RunFlag == "" {
 		fmt.Println("Error: None or bad flags provided. You must provide one flag: --codebase --database --network")
 		os.Exit(-1)
 	}
 
-	if (*codebaseTest && *dbTest) || (*codebaseTest && *networkTest) || (*dbTest && *networkTest) {
-		fmt.Println("Error: Multiple flags provided. Use just one flag at a time")
+	if (simOp.CodebaseScanFlag && simOp.DBTestFlag) || (simOp.CodebaseScanFlag && simOp.NetFlag) || (simOp.DBTestFlag && simOp.NetFlag) {
+		fmt.Println("Error: Multiple flags provided. Use just one sim flag at a time")
 		os.Exit(-1)
 	}
 
-	if *networkTest && *helpCommand {
+	if simOp.NetFlag && genOp.HelpFlag {
 		fmt.Print(`
 	Usage of the network feature:
 		-h : help command for network
-		-f : function to be ran
-		-is : single ip or start of ip range
-		-ie : end of ip range
+		-f <ps> : function to be ran
+		-ip <0.0.0.0> : single ip or CIDR to run tests on
+		-i <wlan1>: network interface 
+		-p <22> : port to scan on the ip
+		-proxy <http://>: proxy to use for the scan
+		-d <2> : timeout for the scan
 
 `)
 		os.Exit(0)
 	}
 
-	if *helpCommand {
+	if genOp.HelpFlag {
 		fmt.Print(`
 	--network   [IP] : Scan the network on given adress in sandbox, based on provided mode (default = safe)
 	--network [range start IP] [range end IP]: Run a network and port scan on the given range of IP addresses
@@ -119,7 +112,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	if *simsCommand {
+	if genOp.ListSimsFlag {
 		fmt.Print(`
 	First run the command --run followed by the type of test simulation you want to run:
 
@@ -139,7 +132,7 @@ func main() {
 
 	var vulns_report []types.Vulnerability
 
-	if *codebaseTest {
+	if simOp.CodebaseScanFlag {
 		if len(args) == 0 {
 			fmt.Println("Error: No target provided. Please specify the target (e.g., directory, database URL, network range).")
 			os.Exit(1)
@@ -155,7 +148,7 @@ func main() {
 		log.Println(vulns)
 	}
 
-	if *dbTest {
+	if simOp.DBTestFlag {
 		db_type := os.Args[1]
 		fmt.Println(db_type)
 		vulns, err := dbs.DB_Scan(*simMode, db_type)
@@ -168,21 +161,32 @@ func main() {
 		log.Println(vulns)
 	}
 
-	if *networkTest {
+	if simOp.NetFlag {
 		var net_report network.NetReport
-		var err error
-		log.Println("Setting up the network tests")
 
-		fun := *funFlag
+		netOp := ParseNetOptions()
+		if netOp.Help {
+			fmt.Print(`
+	Usage of the network feature:
+		-h : help command for network
+		-f <ps> : function to be ran
+		-ip <0.0.0.0> : single ip or CIDR to run tests on
+		-i <wlan1>: network interface 
+		-p <22> : port to scan on the ip
+		-proxy <http://>: proxy to use for the scan
+		-d <2> : timeout for the scan
 
-		ipArr, ifi := GetInputIPs(ifaceFlag, ipStart, ipEnd)
-		// -ips and -ipe flags for ip ranges
-		// -i for net interface (base is eno1)
+`)
+			os.Exit(0)
+		}
 
-		// I'd say that every scan function could return also its time.Duration to log how long it had taken to finish
-		switch fun {
+		slog.Info("Setting up the network tests")
+
+		ipArr, ifi := getInputIPs(&netOp.IfaceFlag, &netOp.IpFlag)
+
+		switch netOp.FunFlag {
 		case "ping", "hS", "hs": // as in host discovery
-			dur, err := network.PingScan(ipArr, *timeoutFlag)
+			dur, err := network.PingScan(ipArr, netOp.Timeout)
 			if err != nil {
 				log.Fatalf("Error in the ping scan: %v\n", err)
 			}
@@ -190,7 +194,7 @@ func main() {
 			log.Printf("Ping scan ended in %v\n", dur)
 			os.Exit(0)
 		case "port", "ps", "pS":
-			dur, err := network.PortScan(*portFlag, *scanTypeFlag, ipArr, *timeoutFlag) // add the port scan type flag and based on that the cases
+			dur, err := network.PortScan(netOp.PortFlag, *scanTypeFlag, ipArr, netOp.Timeout) // add the port scan type flag and based on that the cases
 			if err != nil {
 				log.Fatalf("Error in the port scan: %v\n", err)
 			}
@@ -225,7 +229,7 @@ func main() {
 			break
 
 		default:
-			log.Fatalf("Specify the function: -f <function>")
+			log.Fatalf("Specify the function: -f <func>")
 			os.Exit(-1)
 		}
 
@@ -233,7 +237,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	if *runCommand {
+	if simOp.RunFlag != "" {
 		if len(args) == 0 {
 			fmt.Println("Error: No specified simulation test to be ran, please use an exact test function name")
 			os.Exit(1)
@@ -264,7 +268,7 @@ func main() {
 				} else {
 					port = "8002"
 				}
-				url, err := RunDocker(lang, target, port)
+				url, err := runDocker(lang, target, port)
 				if err != nil {
 					log.Fatalf("Error running the docker container function: %v\n", err)
 					os.Exit(1)
@@ -317,7 +321,7 @@ func main() {
 				} else {
 					port = "8002"
 				}
-				url, err := RunDocker(lang, target, port)
+				url, err := runDocker(lang, target, port)
 				if err != nil {
 					log.Fatalf("Error running the docker container function: %v\n", err)
 					os.Exit(1)
@@ -377,7 +381,7 @@ func main() {
 }
 
 // function to run the selected docker container for the user to use as a sandbox enviroment on the port 8002
-func RunDocker(language, target, port string) (string, error) {
+func runDocker(language, target, port string) (string, error) {
 	dockerfile := selectDockerFile(language, target, port)
 	// url := fmt.Sprintf("http://localhost:%s", port)
 	url := "http://localhost:8080"
@@ -541,4 +545,29 @@ func waitForContainerReady(url string, maxRetries int, delay time.Duration) erro
 		time.Sleep(delay)
 	}
 	return fmt.Errorf("container not ready at %s after %d attempts", url, maxRetries)
+}
+
+// func getInputIPs(ifaceFlag, ipStart, ipEnd *string) ([]net.IP, *net.Interface) {
+func getInputIPs(ifaceFlag, ipStart *string) ([]net.IP, *net.Interface) {
+	var addrs []string
+	var ipArr []net.IP
+	ifi, err := net.InterfaceByName(*ifaceFlag)
+	if err != nil {
+		log.Fatalf("Error getting the net interface: %v\n", err)
+	}
+
+	addrs = append(addrs, *ipStart, "")
+
+	addr_start, addr_end, isCidr, err := netlibk.ParseIPInputs(addrs)
+	if err != nil {
+		log.Fatalf("Error parsing the input values: %v\n", err)
+	}
+
+	if isCidr {
+		ipArr = netlibk.GenerateIPsFromCIDR(addr_start)
+	} else {
+		ipArr = netlibk.GenerateIPs(addr_start, addr_end)
+	}
+
+	return ipArr, ifi
 }
